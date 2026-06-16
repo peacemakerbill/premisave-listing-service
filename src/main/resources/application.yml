@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: premisave-listing-service
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/premisave-listing
+  redis:
+    host: localhost
+    port: 6379
+
+server:
+  port: 8082
+
+# Auth Service Integration
+auth:
+  service:
+    url: http://localhost:8080
+
+# JWT (same secret as auth service)
+jwt:
+  secret: eW91ci12ZXJ5LXNlY3VyZS1qd3Qtc2VjcmV0LWtleS0zMi1ieXRlcyE=
+
+# Cloudinary (same as auth service)
+cloudinary:
+  cloud-name: thepeacemakersllc
+  api-key: 929659223288334
+  api-secret: nAsBdgfXx86u7-Y8X2VnLa-2FbQ
+
+# Rate Limiting
+rate-limit:
+  requests-per-minute: 100
+
+frontend:
+  url: http://localhost:3000
+
+logging:
+  level:
+    com.premisave: DEBUG
