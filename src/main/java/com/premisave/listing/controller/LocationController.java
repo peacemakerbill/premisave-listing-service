@@ -6,7 +6,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/locations")
@@ -15,17 +14,36 @@ public class LocationController {
 
     private final LocationService locationService;
 
+    /**
+     * Find listings near a specific location (Great for map view)
+     */
     @GetMapping("/nearby")
     public ResponseEntity<List<?>> findNearbyListings(
             @RequestParam Double latitude,
             @RequestParam Double longitude,
-            @RequestParam(defaultValue = "10") Double radiusKm) {
+            @RequestParam(defaultValue = "10.0") Double radiusKm) {
         
         return ResponseEntity.ok(locationService.findNearbyListings(latitude, longitude, radiusKm));
     }
 
-    @GetMapping("/search")
-    public ResponseEntity<?> searchByLocation(@RequestParam String city) {
+    /**
+     * Search listings by city
+     */
+    @GetMapping("/city")
+    public ResponseEntity<List<?>> searchByCity(@RequestParam String city) {
         return ResponseEntity.ok(locationService.searchByCity(city));
+    }
+
+    /**
+     * Search listings within map bounds (for frontend map)
+     */
+    @GetMapping("/bounds")
+    public ResponseEntity<List<?>> findInBounds(
+            @RequestParam Double minLat,
+            @RequestParam Double maxLat,
+            @RequestParam Double minLng,
+            @RequestParam Double maxLng) {
+        
+        return ResponseEntity.ok(locationService.findListingsInBounds(minLat, maxLat, minLng, maxLng));
     }
 }

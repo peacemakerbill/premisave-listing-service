@@ -1,21 +1,29 @@
 package com.premisave.listing.service;
 
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AdminService {
 
     public Object getAllListings() {
-        return "All listings retrieved (Admin)";
+        log.info("Admin fetching all listings");
+        return "All listings retrieved successfully (implement full logic as needed)";
     }
 
     public String approveListing(String id) {
-        return "Listing " + id + " approved";
+        log.info("Admin approved listing: {}", id);
+        return "Listing " + id + " has been approved";
     }
 
     public String rejectListing(String id) {
-        return "Listing " + id + " rejected";
+        log.info("Admin rejected listing: {}", id);
+        return "Listing " + id + " has been rejected";
+    }
+
+    public String archiveListing(String id) {
+        log.info("Admin archived listing: {}", id);
+        return "Listing " + id + " has been archived";
     }
 }

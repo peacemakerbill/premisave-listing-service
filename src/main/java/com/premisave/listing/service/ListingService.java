@@ -3,6 +3,7 @@ package com.premisave.listing.service;
 import com.premisave.listing.client.AuthServiceClient;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingResponse;
+import com.premisave.listing.dto.UserProfileSummary;
 import com.premisave.listing.entity.*;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
@@ -43,8 +44,8 @@ public class ListingService {
                 shortTerm.setMaxGuests(request.getMaxGuests());
                 shortTerm.setBedrooms(request.getBedrooms());
                 shortTerm.setBathrooms(request.getBathrooms());
-                shortTerm.setHasWifi(request.isHasWifi());
-                shortTerm.setHasKitchen(request.isHasKitchen());
+                shortTerm.setHasWifi(Boolean.TRUE.equals(request.getHasWifi()));
+                shortTerm.setHasKitchen(Boolean.TRUE.equals(request.getHasKitchen()));
                 shortTerm.setAmenities(request.getAmenities());
                 listing = shortTerm;
                 shortTermRentalRepository.save((ShortTermRental) listing);
@@ -53,7 +54,7 @@ public class ListingService {
             case LONG_TERM_RENTAL:
                 LongTermRental longTerm = new LongTermRental();
                 longTerm.setMinLeaseMonths(request.getMinLeaseMonths());
-                longTerm.setFurnished(request.isFurnished());
+                longTerm.setFurnished(Boolean.TRUE.equals(request.getFurnished()));
                 longTerm.setTenantRequirements(request.getTenantRequirements());
                 listing = longTerm;
                 longTermRentalRepository.save((LongTermRental) listing);
@@ -63,7 +64,7 @@ public class ListingService {
                 LandSale landSale = new LandSale();
                 landSale.setSizeInAcres(request.getSizeInAcres());
                 landSale.setLandUseType(request.getLandUseType());
-                landSale.setHasTitleDeed(request.isHasTitleDeed());
+                landSale.setHasTitleDeed(Boolean.TRUE.equals(request.getHasTitleDeed()));
                 listing = landSale;
                 landSaleRepository.save((LandSale) listing);
                 break;
@@ -74,7 +75,7 @@ public class ListingService {
                 houseSale.setBathrooms(request.getBathrooms());
                 houseSale.setFloors(request.getFloors());
                 houseSale.setPlotSize(request.getPlotSize());
-                houseSale.setHasGarage(request.isHasGarage());
+                houseSale.setHasGarage(Boolean.TRUE.equals(request.getHasGarage()));
                 houseSale.setPropertyType(request.getPropertyType());
                 listing = houseSale;
                 houseSaleRepository.save((HouseSale) listing);
@@ -85,7 +86,7 @@ public class ListingService {
                 lease.setLeaseDurationMonths(request.getLeaseDurationMonths());
                 lease.setDepositAmount(request.getDepositAmount());
                 lease.setLeaseTerms(request.getLeaseTerms());
-                lease.setRenewable(request.isRenewable());
+                lease.setRenewable(Boolean.TRUE.equals(request.getRenewable()));
                 listing = lease;
                 leaseRepository.save((Lease) listing);
                 break;
@@ -94,6 +95,7 @@ public class ListingService {
                 throw new IllegalArgumentException("Unsupported listing category: " + request.getCategory());
         }
 
+        // Common fields
         listing.setOwnerId(user.getId());
         listing.setTitle(request.getTitle());
         listing.setDescription(request.getDescription());
@@ -110,7 +112,7 @@ public class ListingService {
 
         log.info("New listing created: {} by user {}", listing.getId(), user.getId());
 
-        return new ListingResponse("Listing created successfully", listing.getId(), listing.getTitle());
+        return new ListingResponse("Listing created successfully", listing.getId(), listing.getTitle(), false);
     }
 
     public List<ShortTermRental> getShortTermRentals(String city) {
@@ -126,6 +128,4 @@ public class ListingService {
             case LEASE -> leaseRepository.findByOwnerId(ownerId);
         };
     }
-
-    // Add more methods as needed (search by location, filter, etc.)
 }

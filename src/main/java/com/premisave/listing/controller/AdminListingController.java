@@ -14,18 +14,23 @@ public class AdminListingController {
 
     private final AdminService adminService;
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<?> getAllListings() {
         return ResponseEntity.ok(adminService.getAllListings());
     }
 
     @PutMapping("/{id}/approve")
-    public ResponseEntity<?> approveListing(@PathVariable String id) {
+    public ResponseEntity<String> approveListing(@PathVariable String id) {
         return ResponseEntity.ok(adminService.approveListing(id));
     }
 
     @PutMapping("/{id}/reject")
-    public ResponseEntity<?> rejectListing(@PathVariable String id) {
+    public ResponseEntity<String> rejectListing(@PathVariable String id) {
         return ResponseEntity.ok(adminService.rejectListing(id));
+    }
+
+    @PutMapping("/{id}/archive")
+    public ResponseEntity<String> archiveListing(@PathVariable String id) {
+        return ResponseEntity.ok(adminService.archiveListing(id));
     }
 }
