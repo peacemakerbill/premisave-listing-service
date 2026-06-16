@@ -3,7 +3,7 @@ package com.premisave.listing.service;
 import com.premisave.listing.client.AuthServiceClient;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingResponse;
-import com.premisave.listing.dto.UserProfileSummary;
+import com.premisave.listing.dto.auth_service.UserSummaryResponse;
 import com.premisave.listing.entity.*;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
@@ -30,7 +30,7 @@ public class ListingService {
     @Transactional
     public ListingResponse createListing(ListingRequest request, String authorizationHeader) {
         // Validate user via Auth Service
-        UserProfileSummary user = authServiceClient.getCurrentUserProfile(authorizationHeader);
+        UserSummaryResponse user = authServiceClient.getCurrentUser(authorizationHeader);
 
         if (user == null) {
             throw new RuntimeException("User not authenticated");

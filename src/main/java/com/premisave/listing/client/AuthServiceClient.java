@@ -70,13 +70,4 @@ public interface AuthServiceClient {
     @PostMapping("/profile/views/{targetId}")
     ProfileViewResponse recordProfileView(@PathVariable String targetId, 
                                           @RequestHeader("Authorization") String token);
-
-    @GetMapping("/profile/views/who-viewed-me")
-    List<ProfileViewResponse> getWhoViewedMe(@RequestHeader("Authorization") String token);
-
-    @GetMapping("/profile/views/who-i-viewed")
-    List<WhoIViewedResponse> getWhoIViewed(@RequestHeader("Authorization") String token);
-
-    @GetMapping("/profile/views/my-stats")
-    ProfileViewStats getMyProfileViewStats(@RequestHeader("Authorization") String token);
 }

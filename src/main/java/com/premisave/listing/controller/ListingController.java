@@ -92,22 +92,4 @@ public class ListingController {
             @RequestHeader("Authorization") String token) {
         return ResponseEntity.ok(socialService.recordProfileView(targetId, token));
     }
-
-    @GetMapping("/views/who-viewed-me")
-    public ResponseEntity<List<ProfileViewResponse>> getWhoViewedMe(
-            @RequestHeader("Authorization") String token) {
-        return ResponseEntity.ok(socialService.getWhoViewedMe(token));
-    }
-
-    @GetMapping("/views/who-i-viewed")
-    public ResponseEntity<List<WhoIViewedResponse>> getWhoIViewed(
-            @RequestHeader("Authorization") String token) {
-        return ResponseEntity.ok(socialService.getWhoIViewed(token));
-    }
-
-    @GetMapping("/views/my-stats")
-    public ResponseEntity<ProfileViewStats> getMyProfileViewStats(
-            @RequestHeader("Authorization") String token) {
-        return ResponseEntity.ok(socialService.getMyProfileViewStats(token));
-    }
 }

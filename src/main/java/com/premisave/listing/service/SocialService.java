@@ -62,29 +62,9 @@ public class SocialService {
         return authServiceClient.getUserSocialStats(userId, token);
     }
 
-    // ====================== USER SOCIAL LISTS ======================
-    public List<UserSummaryResponse> getMyLikes(String token) {
-        return authServiceClient.getMyLikes(token);
-    }
-
-    public List<UserSummaryResponse> getMyFollowing(String token) {
-        return authServiceClient.getMyFollowing(token);
-    }
-
     // ====================== PROFILE VIEWS ======================
     public ProfileViewResponse recordProfileView(String targetId, String token) {
         return authServiceClient.recordProfileView(targetId, token);
     }
 
-    public List<ProfileViewResponse> getWhoViewedMe(String token) {
-        return authServiceClient.getWhoViewedMe(token);
-    }
-
-    public List<WhoIViewedResponse> getWhoIViewed(String token) {
-        return authServiceClient.getWhoIViewed(token);
-    }
-
-    public ProfileViewStats getMyProfileViewStats(String token) {
-        return authServiceClient.getMyProfileViewStats(token);
-    }
 }
