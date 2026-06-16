@@ -2,6 +2,9 @@ package com.premisave.listing.entity;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+
+import java.math.BigDecimal;
+
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Data

@@ -4,7 +4,6 @@ import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import org.springframework.data.mongodb.core.index.GeoSpatialIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
