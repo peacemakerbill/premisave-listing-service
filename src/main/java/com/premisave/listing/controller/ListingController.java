@@ -1,0 +1,47 @@
+package com.premisave.listing.controller;
+
+import com.premisave.listing.dto.ListingRequest;
+import com.premisave.listing.dto.ListingResponse;
+import com.premisave.listing.entity.ShortTermRental;
+import com.premisave.listing.enums.ListingCategory;
+import com.premisave.listing.service.ListingService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/listings")
+@RequiredArgsConstructor
+public class ListingController {
+
+    private final ListingService listingService;
+
+    @PostMapping
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ListingResponse> createListing(
+            @Valid @RequestBody ListingRequest request,
+            @RequestHeader("Authorization") String authorization) {
+        
+        ListingResponse response = listingService.createListing(request, authorization);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/short-term")
+    public ResponseEntity<List<ShortTermRental>> getShortTermRentals(@RequestParam(required = false) String city) {
+        List<ShortTermRental> listings = listingService.getShortTermRentals(city);
+        return ResponseEntity.ok(listings);
+    }
+
+    @GetMapping("/owner/{ownerId}")
+    public ResponseEntity<?> getListingsByOwner(
+            @PathVariable String ownerId,
+            @RequestParam ListingCategory category) {
+        
+        var listings = listingService.getListingsByOwner(ownerId, category);
+        return ResponseEntity.ok(listings);
+    }
+}
