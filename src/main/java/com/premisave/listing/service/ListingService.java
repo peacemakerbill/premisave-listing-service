@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -43,6 +44,7 @@ public class ListingService {
 
         Listing listing = createSpecificListing(request);
 
+        // Set common fields
         listing.setOwnerId(user.getId());
         listing.setTitle(request.getTitle());
         listing.setDescription(request.getDescription());
@@ -141,11 +143,8 @@ public class ListingService {
 
         Map<String, Object> uploadParams = new HashMap<>();
         uploadParams.put("folder", "premisave/listings");
-        // You can add more options here if needed
-        // uploadParams.put("resource_type", "image");
 
         Map<?, ?> uploadResult = cloudinary.uploader().upload(file.getBytes(), uploadParams);
-
         return (String) uploadResult.get("secure_url");
     }
 
@@ -167,11 +166,11 @@ public class ListingService {
                 .toList();
     }
 
-    // ====================== OTHER METHODS ======================
+    // ====================== QUERY METHODS ======================
 
     public Object getListingById(String id) {
         return shortTermRentalRepository.findById(id)
-                .map(listing -> (Object) listing)
+                .map(l -> (Object) l)
                 .or(() -> longTermRentalRepository.findById(id).map(l -> (Object) l))
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
@@ -187,6 +186,7 @@ public class ListingService {
             throw new RuntimeException("You can only update your own listings");
         }
 
+        // Update common fields
         existing.setTitle(request.getTitle());
         existing.setDescription(request.getDescription());
         existing.setPrice(request.getPrice());
@@ -196,6 +196,7 @@ public class ListingService {
         existing.setCity(request.getCity());
         existing.setCountry(request.getCountry());
         existing.setMainImageUrl(request.getMainImageUrl());
+
         if (request.getImageUrls() != null) {
             existing.setImageUrls(request.getImageUrls());
         }
@@ -208,33 +209,53 @@ public class ListingService {
 
     private void updateSpecificFields(Listing listing, ListingRequest request) {
         if (listing instanceof ShortTermRental st) {
-            if (request.getMaxGuests() != null) st.setMaxGuests(request.getMaxGuests());
-            if (request.getBedrooms() != null) st.setBedrooms(request.getBedrooms());
-            if (request.getBathrooms() != null) st.setBathrooms(request.getBathrooms());
-            if (request.getHasWifi() != null) st.setHasWifi(request.getHasWifi());
-            if (request.getHasKitchen() != null) st.setHasKitchen(request.getHasKitchen());
-            if (request.getAmenities() != null) st.setAmenities(request.getAmenities());
+            updateShortTermRental(st, request);
         } else if (listing instanceof LongTermRental lt) {
-            if (request.getMinLeaseMonths() != null) lt.setMinLeaseMonths(request.getMinLeaseMonths());
-            if (request.getFurnished() != null) lt.setFurnished(request.getFurnished());
-            if (request.getTenantRequirements() != null) lt.setTenantRequirements(request.getTenantRequirements());
+            updateLongTermRental(lt, request);
         } else if (listing instanceof LandSale ls) {
-            if (request.getSizeInAcres() != null) ls.setSizeInAcres(request.getSizeInAcres());
-            if (request.getLandUseType() != null) ls.setLandUseType(request.getLandUseType());
-            if (request.getHasTitleDeed() != null) ls.setHasTitleDeed(request.getHasTitleDeed());
+            updateLandSale(ls, request);
         } else if (listing instanceof HouseSale hs) {
-            if (request.getBedrooms() != null) hs.setBedrooms(request.getBedrooms());
-            if (request.getBathrooms() != null) hs.setBathrooms(request.getBathrooms());
-            if (request.getFloors() != null) hs.setFloors(request.getFloors());
-            if (request.getPlotSize() != null) hs.setPlotSize(request.getPlotSize());
-            if (request.getHasGarage() != null) hs.setHasGarage(request.getHasGarage());
-            if (request.getPropertyType() != null) hs.setPropertyType(request.getPropertyType());
+            updateHouseSale(hs, request);
         } else if (listing instanceof Lease lease) {
-            if (request.getLeaseDurationMonths() != null) lease.setLeaseDurationMonths(request.getLeaseDurationMonths());
-            if (request.getDepositAmount() != null) lease.setDepositAmount(request.getDepositAmount());
-            if (request.getLeaseTerms() != null) lease.setLeaseTerms(request.getLeaseTerms());
-            if (request.getRenewable() != null) lease.setRenewable(request.getRenewable());
+            updateLease(lease, request);
         }
+    }
+
+    private void updateShortTermRental(ShortTermRental st, ListingRequest r) {
+        if (r.getMaxGuests() != null) st.setMaxGuests(r.getMaxGuests());
+        if (r.getBedrooms() != null) st.setBedrooms(r.getBedrooms());
+        if (r.getBathrooms() != null) st.setBathrooms(r.getBathrooms());
+        if (r.getHasWifi() != null) st.setHasWifi(r.getHasWifi());
+        if (r.getHasKitchen() != null) st.setHasKitchen(r.getHasKitchen());
+        if (r.getAmenities() != null) st.setAmenities(r.getAmenities());
+    }
+
+    private void updateLongTermRental(LongTermRental lt, ListingRequest r) {
+        if (r.getMinLeaseMonths() != null) lt.setMinLeaseMonths(r.getMinLeaseMonths());
+        if (r.getFurnished() != null) lt.setFurnished(r.getFurnished());
+        if (r.getTenantRequirements() != null) lt.setTenantRequirements(r.getTenantRequirements());
+    }
+
+    private void updateLandSale(LandSale ls, ListingRequest r) {
+        if (r.getSizeInAcres() != null) ls.setSizeInAcres(r.getSizeInAcres());
+        if (r.getLandUseType() != null) ls.setLandUseType(r.getLandUseType());
+        if (r.getHasTitleDeed() != null) ls.setHasTitleDeed(r.getHasTitleDeed());
+    }
+
+    private void updateHouseSale(HouseSale hs, ListingRequest r) {
+        if (r.getBedrooms() != null) hs.setBedrooms(r.getBedrooms());
+        if (r.getBathrooms() != null) hs.setBathrooms(r.getBathrooms());
+        if (r.getFloors() != null) hs.setFloors(r.getFloors());
+        if (r.getPlotSize() != null) hs.setPlotSize(r.getPlotSize());
+        if (r.getHasGarage() != null) hs.setHasGarage(r.getHasGarage());
+        if (r.getPropertyType() != null) hs.setPropertyType(r.getPropertyType());
+    }
+
+    private void updateLease(Lease lease, ListingRequest r) {
+        if (r.getLeaseDurationMonths() != null) lease.setLeaseDurationMonths(r.getLeaseDurationMonths());
+        if (r.getDepositAmount() != null) lease.setDepositAmount(r.getDepositAmount());
+        if (r.getLeaseTerms() != null) lease.setLeaseTerms(r.getLeaseTerms());
+        if (r.getRenewable() != null) lease.setRenewable(r.getRenewable());
     }
 
     @Transactional
@@ -260,6 +281,17 @@ public class ListingService {
     public List<?> getListingsByOwner(String ownerId, ListingCategory category) {
         if (ownerId == null || ownerId.trim().isEmpty()) {
             return List.of();
+        }
+
+        if (category == null) {
+            // Return all listing types for the owner
+            List<Object> allListings = new ArrayList<>();
+            allListings.addAll(shortTermRentalRepository.findByOwnerId(ownerId));
+            allListings.addAll(longTermRentalRepository.findByOwnerId(ownerId));
+            allListings.addAll(landSaleRepository.findByOwnerId(ownerId));
+            allListings.addAll(houseSaleRepository.findByOwnerId(ownerId));
+            allListings.addAll(leaseRepository.findByOwnerId(ownerId));
+            return allListings;
         }
 
         return switch (category) {

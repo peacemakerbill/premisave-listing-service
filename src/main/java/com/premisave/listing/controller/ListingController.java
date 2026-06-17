@@ -62,6 +62,14 @@ public class ListingController {
 
     // ====================== QUERY ENDPOINTS ======================
 
+    @GetMapping("/me")
+    public ResponseEntity<List<?>> getMyListings(@RequestHeader("Authorization") String authorization) {
+        String ownerId = jwtUtil.extractUserId(authorization);
+        // For now return all types - can be improved later
+        List<?> listings = listingService.getListingsByOwner(ownerId, null); // TODO: handle null category
+        return ResponseEntity.ok(listings);
+    }
+
     @GetMapping("/short-term")
     public ResponseEntity<List<ShortTermRental>> getShortTermRentals(
             @RequestParam(required = false) String city) {
@@ -71,7 +79,7 @@ public class ListingController {
     @GetMapping("/owner/{ownerId}")
     public ResponseEntity<List<?>> getListingsByOwner(
             @PathVariable String ownerId,
-            @RequestParam ListingCategory category) {
+            @RequestParam(required = false) ListingCategory category) {
         return ResponseEntity.ok(listingService.getListingsByOwner(ownerId, category));
     }
 
@@ -103,7 +111,6 @@ public class ListingController {
             @RequestParam("files") List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
 
-        String userId = jwtUtil.extractUserId(authorization);
         List<String> imageUrls = listingService.uploadImages(files);
         return ResponseEntity.ok(imageUrls);
     }
