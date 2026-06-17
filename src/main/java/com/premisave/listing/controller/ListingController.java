@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -93,5 +94,17 @@ public class ListingController {
 
         List<?> results = listingService.getListingsByCategory(category, city);
         return ResponseEntity.ok(results);
+    }
+
+    // ====================== IMAGE UPLOAD ======================
+
+    @PostMapping("/upload-images")
+    public ResponseEntity<List<String>> uploadImages(
+            @RequestParam("files") List<MultipartFile> files,
+            @RequestHeader("Authorization") String authorization) {
+
+        String userId = jwtUtil.extractUserId(authorization);
+        List<String> imageUrls = listingService.uploadImages(files);
+        return ResponseEntity.ok(imageUrls);
     }
 }

@@ -1,5 +1,6 @@
 package com.premisave.listing.service;
 
+import com.cloudinary.Cloudinary;
 import com.premisave.listing.client.AuthServiceClient;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingResponse;
@@ -12,9 +13,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -27,6 +32,7 @@ public class ListingService {
     private final HouseSaleRepository houseSaleRepository;
     private final LeaseRepository leaseRepository;
     private final AuthServiceClient authServiceClient;
+    private final Cloudinary cloudinary;
 
     @Transactional
     public ListingResponse createListing(ListingRequest request, String authorizationHeader) {
@@ -37,7 +43,6 @@ public class ListingService {
 
         Listing listing = createSpecificListing(request);
 
-        // Set common fields BEFORE saving
         listing.setOwnerId(user.getId());
         listing.setTitle(request.getTitle());
         listing.setDescription(request.getDescription());
@@ -127,6 +132,43 @@ public class ListingService {
         };
     }
 
+    // ====================== CLOUDINARY IMAGE UPLOAD ======================
+
+    public String uploadImage(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Object> uploadParams = new HashMap<>();
+        uploadParams.put("folder", "premisave/listings");
+        // You can add more options here if needed
+        // uploadParams.put("resource_type", "image");
+
+        Map<?, ?> uploadResult = cloudinary.uploader().upload(file.getBytes(), uploadParams);
+
+        return (String) uploadResult.get("secure_url");
+    }
+
+    public List<String> uploadImages(List<MultipartFile> files) {
+        if (files == null || files.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        return files.stream()
+                .map(file -> {
+                    try {
+                        return uploadImage(file);
+                    } catch (IOException e) {
+                        log.error("Failed to upload image: {}", e.getMessage());
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    // ====================== OTHER METHODS ======================
+
     public Object getListingById(String id) {
         return shortTermRentalRepository.findById(id)
                 .map(listing -> (Object) listing)
@@ -172,17 +214,14 @@ public class ListingService {
             if (request.getHasWifi() != null) st.setHasWifi(request.getHasWifi());
             if (request.getHasKitchen() != null) st.setHasKitchen(request.getHasKitchen());
             if (request.getAmenities() != null) st.setAmenities(request.getAmenities());
-
         } else if (listing instanceof LongTermRental lt) {
             if (request.getMinLeaseMonths() != null) lt.setMinLeaseMonths(request.getMinLeaseMonths());
             if (request.getFurnished() != null) lt.setFurnished(request.getFurnished());
             if (request.getTenantRequirements() != null) lt.setTenantRequirements(request.getTenantRequirements());
-
         } else if (listing instanceof LandSale ls) {
             if (request.getSizeInAcres() != null) ls.setSizeInAcres(request.getSizeInAcres());
             if (request.getLandUseType() != null) ls.setLandUseType(request.getLandUseType());
             if (request.getHasTitleDeed() != null) ls.setHasTitleDeed(request.getHasTitleDeed());
-
         } else if (listing instanceof HouseSale hs) {
             if (request.getBedrooms() != null) hs.setBedrooms(request.getBedrooms());
             if (request.getBathrooms() != null) hs.setBathrooms(request.getBathrooms());
@@ -190,7 +229,6 @@ public class ListingService {
             if (request.getPlotSize() != null) hs.setPlotSize(request.getPlotSize());
             if (request.getHasGarage() != null) hs.setHasGarage(request.getHasGarage());
             if (request.getPropertyType() != null) hs.setPropertyType(request.getPropertyType());
-
         } else if (listing instanceof Lease lease) {
             if (request.getLeaseDurationMonths() != null) lease.setLeaseDurationMonths(request.getLeaseDurationMonths());
             if (request.getDepositAmount() != null) lease.setDepositAmount(request.getDepositAmount());
@@ -257,7 +295,6 @@ public class ListingService {
         if (category != null) {
             results.addAll(getListingsByCategory(category, city));
         } else {
-            // Search across all types if no category specified
             if (city != null && !city.trim().isEmpty()) {
                 results.addAll(shortTermRentalRepository.findByCityAndActiveTrue(city));
             } else {

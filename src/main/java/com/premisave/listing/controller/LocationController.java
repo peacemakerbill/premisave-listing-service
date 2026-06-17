@@ -23,7 +23,8 @@ public class LocationController {
             @RequestParam Double longitude,
             @RequestParam(defaultValue = "10.0") Double radiusKm) {
         
-        return ResponseEntity.ok(locationService.findNearbyListings(latitude, longitude, radiusKm));
+        List<?> listings = locationService.findNearbyListings(latitude, longitude, radiusKm);
+        return ResponseEntity.ok(listings);
     }
 
     /**
@@ -31,11 +32,12 @@ public class LocationController {
      */
     @GetMapping("/city")
     public ResponseEntity<List<?>> searchByCity(@RequestParam String city) {
-        return ResponseEntity.ok(locationService.searchByCity(city));
+        List<?> listings = locationService.searchByCity(city);
+        return ResponseEntity.ok(listings);
     }
 
     /**
-     * Search listings within map bounds (for frontend map)
+     * Search listings within map bounds (for frontend map view)
      */
     @GetMapping("/bounds")
     public ResponseEntity<List<?>> findInBounds(
@@ -44,6 +46,7 @@ public class LocationController {
             @RequestParam Double minLng,
             @RequestParam Double maxLng) {
         
-        return ResponseEntity.ok(locationService.findListingsInBounds(minLat, maxLat, minLng, maxLng));
+        List<?> listings = locationService.findListingsInBounds(minLat, maxLat, minLng, maxLng);
+        return ResponseEntity.ok(listings);
     }
 }
