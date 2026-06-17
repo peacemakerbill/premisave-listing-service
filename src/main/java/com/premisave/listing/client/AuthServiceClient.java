@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @FeignClient(
-    name = "auth-service", 
+    name = "auth-service",
     url = "${auth.service.url:http://localhost:8080}",
     configuration = FeignConfig.class
 )
@@ -25,6 +25,9 @@ public interface AuthServiceClient {
     @GetMapping("/profile/search")
     List<UserSummaryResponse> searchUsers(@RequestParam("query") String query, 
                                           @RequestHeader("Authorization") String token);
+
+    @GetMapping("/profile/all")
+    List<UserSummaryResponse> getAllUsers(@RequestHeader("Authorization") String token);
 
     // ── Social ──────────────────────────────────────────────────────
     @PostMapping("/social/like")
@@ -63,8 +66,27 @@ public interface AuthServiceClient {
     UserInteractionResponse getUserSocialStats(@PathVariable String userId, 
                                                @RequestHeader("Authorization") String token);
 
+    @GetMapping("/social/my-likes")
+    List<UserSummaryResponse> getMyLikes(@RequestHeader("Authorization") String token);
+
+    @GetMapping("/social/my-following")
+    List<UserSummaryResponse> getMyFollowing(@RequestHeader("Authorization") String token);
+
     // ── Profile Views ───────────────────────────────────────────────
     @PostMapping("/profile/views/{targetId}")
     ProfileViewResponse recordProfileView(@PathVariable String targetId, 
                                           @RequestHeader("Authorization") String token);
+
+    @GetMapping("/profile/views/who-viewed-me")
+    List<ProfileViewResponse> getWhoViewedMe(@RequestHeader("Authorization") String token);
+
+    @GetMapping("/profile/views/who-i-viewed")
+    List<WhoIViewedResponse> getWhoIViewed(@RequestHeader("Authorization") String token);
+
+    @GetMapping("/profile/views/stats")
+    Object getMyProfileViewStats(@RequestHeader("Authorization") String token);
+
+    @GetMapping("/profile/views/stats/{userId}")
+    PublicProfileViewStats getOtherUserProfileViewStats(@PathVariable String userId, 
+                                                        @RequestHeader("Authorization") String token);
 }

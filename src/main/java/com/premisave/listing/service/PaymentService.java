@@ -36,7 +36,6 @@ public class PaymentService {
 
         Payment savedPayment = paymentRepository.save(payment);
 
-        // Create receipt
         createPaymentReceipt(savedPayment);
 
         log.info("Payment processed successfully for user: {}, amount: {}", userId, amount);
@@ -48,7 +47,7 @@ public class PaymentService {
         receipt.setPaymentId(payment.getId());
         receipt.setUserId(payment.getUserId());
         receipt.setReceiptNumber("RCPT-" + System.currentTimeMillis());
-        receipt.setReceiptUrl("https://premisave.com/receipts/" + receipt.getReceiptNumber()); // TODO: Generate real PDF
+        receipt.setReceiptUrl("https://premisave.com/receipts/" + receipt.getReceiptNumber());
 
         paymentReceiptRepository.save(receipt);
     }

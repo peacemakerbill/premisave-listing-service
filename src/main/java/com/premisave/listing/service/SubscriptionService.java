@@ -21,7 +21,7 @@ public class SubscriptionService {
 
     @Transactional
     public Subscription createSubscription(String ownerId, SubscriptionPlan plan) {
-        // Check if user already has active subscription
+        // Prevent duplicate active subscriptions
         subscriptionRepository.findByOwnerIdAndActiveTrue(ownerId)
                 .ifPresent(existing -> {
                     throw new RuntimeException("User already has an active subscription");
