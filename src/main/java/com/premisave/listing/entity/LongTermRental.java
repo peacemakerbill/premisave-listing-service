@@ -10,6 +10,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class LongTermRental extends Listing {
 
     private int minLeaseMonths;
-    private boolean furnished;
+    private boolean furnished = false;
     private String tenantRequirements;
 }

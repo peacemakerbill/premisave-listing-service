@@ -14,6 +14,13 @@ public class JwtUtil {
         if (token != null && token.startsWith("Bearer ")) {
             token = token.substring(7);
         }
+        return jwtService.extractUserId(token);
+    }
+
+    public String extractUsername(String token) {
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
         return jwtService.extractUsername(token);
     }
 }

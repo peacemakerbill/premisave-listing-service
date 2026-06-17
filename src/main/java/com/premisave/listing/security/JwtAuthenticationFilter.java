@@ -28,10 +28,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String authHeader = request.getHeader("Authorization");
-        log.debug("Authorization header: {}", authHeader != null ? authHeader.substring(0, Math.min(authHeader.length(), 50)) + "..." : null);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.debug("No Bearer token found - continuing as unauthenticated");
             filterChain.doFilter(request, response);
             return;
         }
@@ -40,25 +38,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             boolean isValid = jwtService.isTokenValid(jwt);
-            log.debug("Token validation result: {}", isValid);
 
             if (isValid) {
+                String userId = jwtService.extractUserId(jwt);
                 String username = jwtService.extractUsername(jwt);
-                log.debug("Extracted username from token: {}", username);
 
-                if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(username, null, Collections.emptyList());
+                            new UsernamePasswordAuthenticationToken(userId, jwt, Collections.emptyList());
 
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
 
-                    log.info("Successfully authenticated user: {}", username);
+                    log.info("Successfully authenticated userId: {}", userId);
                 }
-            } else {
-                log.warn("JWT token validation failed");
             }
-
         } catch (Exception e) {
             log.error("Error processing JWT token", e);
         }

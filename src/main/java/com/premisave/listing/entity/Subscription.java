@@ -15,7 +15,7 @@ public class Subscription extends BaseEntity {
 
     private String ownerId;
     private SubscriptionPlan plan;
-    private BigDecimal amount; // in USD
+    private BigDecimal amount;
     private LocalDateTime startDate;
     private LocalDateTime endDate;
     private boolean active = true;

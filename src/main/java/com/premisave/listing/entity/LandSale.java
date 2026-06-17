@@ -10,6 +10,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class LandSale extends Listing {
 
     private double sizeInAcres;
-    private String landUseType; // residential, commercial, agricultural
-    private boolean hasTitleDeed;
+    private String landUseType;
+    private boolean hasTitleDeed = false;
 }

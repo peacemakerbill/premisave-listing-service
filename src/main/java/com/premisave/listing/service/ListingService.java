@@ -29,73 +29,15 @@ public class ListingService {
 
     @Transactional
     public ListingResponse createListing(ListingRequest request, String authorizationHeader) {
-        // Validate user via Auth Service
         UserSummaryResponse user = authServiceClient.getCurrentUser(authorizationHeader);
 
         if (user == null) {
             throw new RuntimeException("User not authenticated");
         }
 
-        Listing listing;
+        Listing listing = createSpecificListing(request);
 
-        switch (request.getCategory()) {
-            case SHORT_TERM_RENTAL:
-                ShortTermRental shortTerm = new ShortTermRental();
-                shortTerm.setMaxGuests(request.getMaxGuests());
-                shortTerm.setBedrooms(request.getBedrooms());
-                shortTerm.setBathrooms(request.getBathrooms());
-                shortTerm.setHasWifi(Boolean.TRUE.equals(request.getHasWifi()));
-                shortTerm.setHasKitchen(Boolean.TRUE.equals(request.getHasKitchen()));
-                shortTerm.setAmenities(request.getAmenities());
-                listing = shortTerm;
-                shortTermRentalRepository.save((ShortTermRental) listing);
-                break;
-
-            case LONG_TERM_RENTAL:
-                LongTermRental longTerm = new LongTermRental();
-                longTerm.setMinLeaseMonths(request.getMinLeaseMonths());
-                longTerm.setFurnished(Boolean.TRUE.equals(request.getFurnished()));
-                longTerm.setTenantRequirements(request.getTenantRequirements());
-                listing = longTerm;
-                longTermRentalRepository.save((LongTermRental) listing);
-                break;
-
-            case LAND_SALE:
-                LandSale landSale = new LandSale();
-                landSale.setSizeInAcres(request.getSizeInAcres());
-                landSale.setLandUseType(request.getLandUseType());
-                landSale.setHasTitleDeed(Boolean.TRUE.equals(request.getHasTitleDeed()));
-                listing = landSale;
-                landSaleRepository.save((LandSale) listing);
-                break;
-
-            case HOUSE_SALE:
-                HouseSale houseSale = new HouseSale();
-                houseSale.setBedrooms(request.getBedrooms());
-                houseSale.setBathrooms(request.getBathrooms());
-                houseSale.setFloors(request.getFloors());
-                houseSale.setPlotSize(request.getPlotSize());
-                houseSale.setHasGarage(Boolean.TRUE.equals(request.getHasGarage()));
-                houseSale.setPropertyType(request.getPropertyType());
-                listing = houseSale;
-                houseSaleRepository.save((HouseSale) listing);
-                break;
-
-            case LEASE:
-                Lease lease = new Lease();
-                lease.setLeaseDurationMonths(request.getLeaseDurationMonths());
-                lease.setDepositAmount(request.getDepositAmount());
-                lease.setLeaseTerms(request.getLeaseTerms());
-                lease.setRenewable(Boolean.TRUE.equals(request.getRenewable()));
-                listing = lease;
-                leaseRepository.save((Lease) listing);
-                break;
-
-            default:
-                throw new IllegalArgumentException("Unsupported listing category: " + request.getCategory());
-        }
-
-        // Common fields
+        // Set common fields (BEFORE saving)
         listing.setOwnerId(user.getId());
         listing.setTitle(request.getTitle());
         listing.setDescription(request.getDescription());
@@ -107,12 +49,74 @@ public class ListingService {
         listing.setCity(request.getCity());
         listing.setCountry(request.getCountry());
         listing.setMainImageUrl(request.getMainImageUrl());
-        listing.setImageUrls(request.getImageUrls());
+        listing.setImageUrls(request.getImageUrls() != null ? 
+                request.getImageUrls() : new java.util.ArrayList<>());
         listing.setStatus(ListingStatus.ACTIVE);
+
+        // Save once
+        listing = saveListing(listing);
 
         log.info("New listing created: {} by user {}", listing.getId(), user.getId());
 
-        return new ListingResponse("Listing created successfully", listing.getId(), listing.getTitle(), false);
+        return new ListingResponse("Listing created successfully", listing.getId(), listing.getTitle(), true);
+    }
+
+    private Listing createSpecificListing(ListingRequest request) {
+        return switch (request.getCategory()) {
+            case SHORT_TERM_RENTAL -> {
+                ShortTermRental st = new ShortTermRental();
+                st.setMaxGuests(request.getMaxGuests());
+                st.setBedrooms(request.getBedrooms());
+                st.setBathrooms(request.getBathrooms());
+                st.setHasWifi(Boolean.TRUE.equals(request.getHasWifi()));
+                st.setHasKitchen(Boolean.TRUE.equals(request.getHasKitchen()));
+                st.setAmenities(request.getAmenities());
+                yield st;
+            }
+            case LONG_TERM_RENTAL -> {
+                LongTermRental lt = new LongTermRental();
+                lt.setMinLeaseMonths(request.getMinLeaseMonths());
+                lt.setFurnished(Boolean.TRUE.equals(request.getFurnished()));
+                lt.setTenantRequirements(request.getTenantRequirements());
+                yield lt;
+            }
+            case LAND_SALE -> {
+                LandSale ls = new LandSale();
+                ls.setSizeInAcres(request.getSizeInAcres());
+                ls.setLandUseType(request.getLandUseType());
+                ls.setHasTitleDeed(Boolean.TRUE.equals(request.getHasTitleDeed()));
+                yield ls;
+            }
+            case HOUSE_SALE -> {
+                HouseSale hs = new HouseSale();
+                hs.setBedrooms(request.getBedrooms());
+                hs.setBathrooms(request.getBathrooms());
+                hs.setFloors(request.getFloors());
+                hs.setPlotSize(request.getPlotSize());
+                hs.setHasGarage(Boolean.TRUE.equals(request.getHasGarage()));
+                hs.setPropertyType(request.getPropertyType());
+                yield hs;
+            }
+            case LEASE -> {
+                Lease lease = new Lease();
+                lease.setLeaseDurationMonths(request.getLeaseDurationMonths());
+                lease.setDepositAmount(request.getDepositAmount());
+                lease.setLeaseTerms(request.getLeaseTerms());
+                lease.setRenewable(Boolean.TRUE.equals(request.getRenewable()));
+                yield lease;
+            }
+        };
+    }
+
+    private Listing saveListing(Listing listing) {
+        return switch (listing) {
+            case ShortTermRental st -> shortTermRentalRepository.save(st);
+            case LongTermRental lt -> longTermRentalRepository.save(lt);
+            case LandSale ls -> landSaleRepository.save(ls);
+            case HouseSale hs -> houseSaleRepository.save(hs);
+            case Lease l -> leaseRepository.save(l);
+            default -> throw new IllegalArgumentException("Unknown listing type");
+        };
     }
 
     public List<ShortTermRental> getShortTermRentals(String city) {

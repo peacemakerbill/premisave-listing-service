@@ -23,6 +23,10 @@ public class JwtService {
         return extractClaim(token, Claims::getSubject);
     }
 
+    public String extractUserId(String token) {
+        return extractClaim(token, claims -> claims.get("userId", String.class));
+    }
+
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         try {
             final Claims claims = extractAllClaims(token);
@@ -54,12 +58,10 @@ public class JwtService {
                 byte[] padded = new byte[32];
                 System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
                 keyBytes = padded;
-                log.warn("JWT secret was padded to 32 bytes");
             } else if (keyBytes.length > 32) {
                 byte[] truncated = new byte[32];
                 System.arraycopy(keyBytes, 0, truncated, 0, 32);
                 keyBytes = truncated;
-                log.warn("JWT secret was truncated to 32 bytes");
             }
 
             return Keys.hmacShaKeyFor(keyBytes);

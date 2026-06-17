@@ -19,7 +19,7 @@ public class Payment extends BaseEntity {
     private String listingId;
     private BigDecimal amount;
     private String currency = "USD";
-    private PaymentMethod method; // PAYPAL, STRIPE, MPESA, AIRTEL
+    private PaymentMethod method;
     private PaymentStatus status = PaymentStatus.PENDING;
     private String transactionRef;
     private LocalDateTime paidAt;

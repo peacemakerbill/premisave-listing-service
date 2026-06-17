@@ -13,6 +13,6 @@ public class HouseSale extends Listing {
     private int bathrooms;
     private int floors;
     private double plotSize;
-    private boolean hasGarage;
-    private String propertyType; // bungalow, villa, apartment, etc.
+    private boolean hasGarage = false;
+    private String propertyType;
 }
