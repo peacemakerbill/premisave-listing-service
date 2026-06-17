@@ -7,6 +7,7 @@ import lombok.EqualsAndHashCode;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,4 +34,8 @@ public class Listing extends BaseEntity {
 
     private String mainImageUrl;
     private List<String> imageUrls = new ArrayList<>();
+
+    // Promotion Fields
+    private boolean isPromoted = false;
+    private LocalDateTime promotionEndDate;
 }

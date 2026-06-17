@@ -4,6 +4,7 @@ import com.cloudinary.Cloudinary;
 import com.premisave.listing.client.AuthServiceClient;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingResponse;
+import com.premisave.listing.dto.MyListingResponse;
 import com.premisave.listing.dto.auth_service.UserSummaryResponse;
 import com.premisave.listing.entity.*;
 import com.premisave.listing.enums.ListingCategory;
@@ -11,11 +12,14 @@ import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +39,9 @@ public class ListingService {
     private final AuthServiceClient authServiceClient;
     private final Cloudinary cloudinary;
 
+    @Value("${ad.promotion.daily-rate:2.99}")
+    private BigDecimal dailyRate;
+
     @Transactional
     public ListingResponse createListing(ListingRequest request, String authorizationHeader) {
         UserSummaryResponse user = authServiceClient.getCurrentUser(authorizationHeader);
@@ -44,7 +51,6 @@ public class ListingService {
 
         Listing listing = createSpecificListing(request);
 
-        // Set common fields
         listing.setOwnerId(user.getId());
         listing.setTitle(request.getTitle());
         listing.setDescription(request.getDescription());
@@ -123,7 +129,7 @@ public class ListingService {
         return lease;
     }
 
-    private Listing saveListing(Listing listing) {
+    public Listing saveListing(Listing listing) {
         return switch (listing) {
             case ShortTermRental st -> shortTermRentalRepository.save(st);
             case LongTermRental lt -> longTermRentalRepository.save(lt);
@@ -134,16 +140,12 @@ public class ListingService {
         };
     }
 
-    // ====================== CLOUDINARY IMAGE UPLOAD ======================
-
     public String uploadImage(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             return null;
         }
-
         Map<String, Object> uploadParams = new HashMap<>();
         uploadParams.put("folder", "premisave/listings");
-
         Map<?, ?> uploadResult = cloudinary.uploader().upload(file.getBytes(), uploadParams);
         return (String) uploadResult.get("secure_url");
     }
@@ -152,7 +154,6 @@ public class ListingService {
         if (files == null || files.isEmpty()) {
             return new ArrayList<>();
         }
-
         return files.stream()
                 .map(file -> {
                     try {
@@ -165,8 +166,6 @@ public class ListingService {
                 .filter(Objects::nonNull)
                 .toList();
     }
-
-    // ====================== QUERY METHODS ======================
 
     public Object getListingById(String id) {
         return shortTermRentalRepository.findById(id)
@@ -181,12 +180,10 @@ public class ListingService {
     @Transactional
     public ListingResponse updateListing(String id, ListingRequest request, String userId) {
         Listing existing = (Listing) getListingById(id);
-
         if (!existing.getOwnerId().equals(userId)) {
             throw new RuntimeException("You can only update your own listings");
         }
 
-        // Update common fields
         existing.setTitle(request.getTitle());
         existing.setDescription(request.getDescription());
         existing.setPrice(request.getPrice());
@@ -202,23 +199,16 @@ public class ListingService {
         }
 
         updateSpecificFields(existing, request);
-
         Listing saved = saveListing(existing);
         return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
     }
 
     private void updateSpecificFields(Listing listing, ListingRequest request) {
-        if (listing instanceof ShortTermRental st) {
-            updateShortTermRental(st, request);
-        } else if (listing instanceof LongTermRental lt) {
-            updateLongTermRental(lt, request);
-        } else if (listing instanceof LandSale ls) {
-            updateLandSale(ls, request);
-        } else if (listing instanceof HouseSale hs) {
-            updateHouseSale(hs, request);
-        } else if (listing instanceof Lease lease) {
-            updateLease(lease, request);
-        }
+        if (listing instanceof ShortTermRental st) updateShortTermRental(st, request);
+        else if (listing instanceof LongTermRental lt) updateLongTermRental(lt, request);
+        else if (listing instanceof LandSale ls) updateLandSale(ls, request);
+        else if (listing instanceof HouseSale hs) updateHouseSale(hs, request);
+        else if (listing instanceof Lease lease) updateLease(lease, request);
     }
 
     private void updateShortTermRental(ShortTermRental st, ListingRequest r) {
@@ -264,7 +254,6 @@ public class ListingService {
         if (!listing.getOwnerId().equals(userId)) {
             throw new RuntimeException("You can only delete your own listings");
         }
-
         listing.setActive(false);
         listing.setArchived(true);
         saveListing(listing);
@@ -284,7 +273,6 @@ public class ListingService {
         }
 
         if (category == null) {
-            // Return all listing types for the owner
             List<Object> allListings = new ArrayList<>();
             allListings.addAll(shortTermRentalRepository.findByOwnerId(ownerId));
             allListings.addAll(longTermRentalRepository.findByOwnerId(ownerId));
@@ -303,44 +291,108 @@ public class ListingService {
         };
     }
 
+    // ====================== IMPROVED PUBLIC QUERIES ======================
     public List<?> getListingsByCategory(ListingCategory category, String city) {
         if (category == null) return List.of();
 
-        return switch (category) {
+        List<Object> all = switch (category) {
             case SHORT_TERM_RENTAL -> {
                 if (city != null && !city.trim().isEmpty()) {
-                    yield shortTermRentalRepository.findByCityAndActiveTrue(city);
+                    yield new ArrayList<>(shortTermRentalRepository.findByCityAndActiveTrue(city));
                 } else {
-                    yield shortTermRentalRepository.findAll();
+                    yield new ArrayList<>(shortTermRentalRepository.findAll());
                 }
             }
-            case LONG_TERM_RENTAL -> longTermRentalRepository.findAll();
-            case LAND_SALE -> landSaleRepository.findAll();
-            case HOUSE_SALE -> houseSaleRepository.findAll();
-            case LEASE -> leaseRepository.findAll();
+            case LONG_TERM_RENTAL -> new ArrayList<>(longTermRentalRepository.findAll());
+            case LAND_SALE -> new ArrayList<>(landSaleRepository.findAll());
+            case HOUSE_SALE -> new ArrayList<>(houseSaleRepository.findAll());
+            case LEASE -> new ArrayList<>(leaseRepository.findAll());
         };
+
+        return all.stream()
+                .filter(obj -> obj instanceof Listing l && isListingVisible(l))
+                .toList();
     }
 
     public List<?> searchListings(String query, ListingCategory category, Double minPrice, Double maxPrice, String city) {
         List<Object> results = new ArrayList<>();
 
+        List<?> candidates;
         if (category != null) {
-            results.addAll(getListingsByCategory(category, city));
+            candidates = getListingsByCategory(category, city);
         } else {
-            if (city != null && !city.trim().isEmpty()) {
-                results.addAll(shortTermRentalRepository.findByCityAndActiveTrue(city));
-            } else {
-                results.addAll(shortTermRentalRepository.findAll());
-                results.addAll(longTermRentalRepository.findAll());
-                results.addAll(houseSaleRepository.findAll());
-                results.addAll(landSaleRepository.findAll());
-                results.addAll(leaseRepository.findAll());
-            }
+            // Fetch all listings across every type
+            List<Object> all = new ArrayList<>();
+            all.addAll(shortTermRentalRepository.findAll());
+            all.addAll(longTermRentalRepository.findAll());
+            all.addAll(landSaleRepository.findAll());
+            all.addAll(houseSaleRepository.findAll());
+            all.addAll(leaseRepository.findAll());
+            candidates = all;
         }
 
-        log.info("Search executed with params: query={}, category={}, price range={}-{}, city={}", 
-                query, category, minPrice, maxPrice, city);
-
+        for (Object obj : candidates) {
+            if (obj instanceof Listing listing && isListingVisible(listing)) {
+                results.add(listing);
+            }
+        }
         return results;
+    }
+
+    private boolean isListingVisible(Listing listing) {
+        if (!listing.isActive() || listing.isArchived()) return false;
+        if (listing.getStatus() == ListingStatus.REJECTED) return false;
+        if (listing.getStatus() == ListingStatus.ACTIVE) return true;
+
+        // Check promotion
+        return listing.isPromoted() && listing.getPromotionEndDate() != null 
+                && listing.getPromotionEndDate().isAfter(LocalDateTime.now());
+    }
+
+    // ====================== MY LISTINGS ======================
+    public List<MyListingResponse> getMyListings(String ownerId, ListingStatus statusFilter) {
+        if (ownerId == null || ownerId.trim().isEmpty()) {
+            return List.of();
+        }
+
+        List<?> rawListings = getListingsByOwner(ownerId, null);
+        List<MyListingResponse> result = new ArrayList<>();
+
+        for (Object obj : rawListings) {
+            if (obj instanceof Listing listing) {
+                MyListingResponse response = mapToMyListingResponse(listing);
+                if (statusFilter == null || response.getStatus() == statusFilter) {
+                    result.add(response);
+                }
+            }
+        }
+        return result;
+    }
+
+    private MyListingResponse mapToMyListingResponse(Listing listing) {
+        Integer daysRemaining = null;
+        if (listing.isPromoted() && listing.getPromotionEndDate() != null) {
+            long days = java.time.temporal.ChronoUnit.DAYS.between(LocalDateTime.now(), listing.getPromotionEndDate());
+            daysRemaining = (days > 0) ? (int) days : 0;
+        }
+
+        MyListingResponse resp = new MyListingResponse();
+        resp.setId(listing.getId());
+        resp.setTitle(listing.getTitle());
+        resp.setDescription(listing.getDescription());
+        resp.setCategory(listing.getCategory());
+        resp.setStatus(listing.getStatus());
+        resp.setPrice(listing.getPrice());
+        resp.setCurrency(listing.getCurrency());
+        resp.setCity(listing.getCity());
+        resp.setMainImageUrl(listing.getMainImageUrl());
+        resp.setImageUrls(listing.getImageUrls());
+        resp.setPromoted(listing.isPromoted());
+        resp.setPromotionEndDate(listing.getPromotionEndDate());
+        resp.setDaysRemaining(daysRemaining);
+        resp.setCreatedAt(listing.getCreatedAt());
+        resp.setUpdatedAt(listing.getUpdatedAt());
+
+        return resp;
     }
 }

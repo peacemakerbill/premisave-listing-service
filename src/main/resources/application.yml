@@ -20,7 +20,7 @@ auth:
 jwt:
   secret: eW91ci12ZXJ5LXNlY3VyZS1qd3Qtc2VjcmV0LWtleS0zMi1ieXRlcyE=
 
-# Cloudinary (same as auth service)
+# Cloudinary
 cloudinary:
   cloud-name: thepeacemakersllc
   api-key: 929659223288334
@@ -29,6 +29,12 @@ cloudinary:
 # Rate Limiting
 rate-limit:
   requests-per-minute: 100
+
+# Ad Promotion Configuration
+ad:
+  promotion:
+    daily-rate: 2.99
+    default-currency: USD
 
 frontend:
   url: http://localhost:3000

@@ -1,9 +1,14 @@
 package com.premisave.listing.controller;
 
+import com.premisave.listing.dto.AdPromotionRequest;
+import com.premisave.listing.dto.AdPromotionResponse;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingResponse;
+import com.premisave.listing.dto.MyListingResponse;
 import com.premisave.listing.entity.ShortTermRental;
 import com.premisave.listing.enums.ListingCategory;
+import com.premisave.listing.enums.ListingStatus;
+import com.premisave.listing.service.AdPromotionService;
 import com.premisave.listing.service.ListingService;
 import com.premisave.listing.util.JwtUtil;
 import jakarta.validation.Valid;
@@ -20,15 +25,14 @@ import java.util.List;
 public class ListingController {
 
     private final ListingService listingService;
+    private final AdPromotionService adPromotionService;
     private final JwtUtil jwtUtil;
 
     // ====================== CRUD OPERATIONS ======================
-
     @PostMapping
     public ResponseEntity<ListingResponse> createListing(
             @Valid @RequestBody ListingRequest request,
             @RequestHeader("Authorization") String authorization) {
-
         ListingResponse response = listingService.createListing(request, authorization);
         return ResponseEntity.ok(response);
     }
@@ -44,7 +48,6 @@ public class ListingController {
             @PathVariable String id,
             @Valid @RequestBody ListingRequest request,
             @RequestHeader("Authorization") String authorization) {
-
         String userId = jwtUtil.extractUserId(authorization);
         ListingResponse response = listingService.updateListing(id, request, userId);
         return ResponseEntity.ok(response);
@@ -54,22 +57,52 @@ public class ListingController {
     public ResponseEntity<String> deleteListing(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorization) {
-
         String userId = jwtUtil.extractUserId(authorization);
         String message = listingService.deleteListing(id, userId);
         return ResponseEntity.ok(message);
     }
 
-    // ====================== QUERY ENDPOINTS ======================
-
+    // ====================== MY LISTINGS ======================
     @GetMapping("/me")
-    public ResponseEntity<List<?>> getMyListings(@RequestHeader("Authorization") String authorization) {
+    public ResponseEntity<List<MyListingResponse>> getMyListings(
+            @RequestHeader("Authorization") String authorization,
+            @RequestParam(required = false) ListingStatus status) {
+        
         String ownerId = jwtUtil.extractUserId(authorization);
-        // For now return all types - can be improved later
-        List<?> listings = listingService.getListingsByOwner(ownerId, null); // TODO: handle null category
+        List<MyListingResponse> listings = listingService.getMyListings(ownerId, status);
         return ResponseEntity.ok(listings);
     }
 
+    // ====================== AD PROMOTION ======================
+    @PostMapping("/promote")
+    public ResponseEntity<AdPromotionResponse> promoteListing(
+            @Valid @RequestBody AdPromotionRequest request,
+            @RequestHeader("Authorization") String authorization) {
+        
+        String userId = jwtUtil.extractUserId(authorization);
+        AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/extend")
+    public ResponseEntity<AdPromotionResponse> extendPromotion(
+            @PathVariable String id,
+            @RequestParam int days,
+            @RequestHeader("Authorization") String authorization) {
+        
+        String userId = jwtUtil.extractUserId(authorization);
+        AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/promotions/my")
+    public ResponseEntity<List<com.premisave.listing.entity.ListingPromotion>> getMyPromotions(
+            @RequestHeader("Authorization") String authorization) {
+        String userId = jwtUtil.extractUserId(authorization);
+        return ResponseEntity.ok(adPromotionService.getUserPromotions(userId));
+    }
+
+    // ====================== OTHER ENDPOINTS ======================
     @GetMapping("/short-term")
     public ResponseEntity<List<ShortTermRental>> getShortTermRentals(
             @RequestParam(required = false) String city) {
@@ -90,27 +123,14 @@ public class ListingController {
             @RequestParam(required = false) Double minPrice,
             @RequestParam(required = false) Double maxPrice,
             @RequestParam(required = false) String city) {
-
         List<?> results = listingService.searchListings(query, category, minPrice, maxPrice, city);
         return ResponseEntity.ok(results);
     }
-
-    @GetMapping("/category/{category}")
-    public ResponseEntity<List<?>> getListingsByCategory(
-            @PathVariable ListingCategory category,
-            @RequestParam(required = false) String city) {
-
-        List<?> results = listingService.getListingsByCategory(category, city);
-        return ResponseEntity.ok(results);
-    }
-
-    // ====================== IMAGE UPLOAD ======================
 
     @PostMapping("/upload-images")
     public ResponseEntity<List<String>> uploadImages(
             @RequestParam("files") List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
-
         List<String> imageUrls = listingService.uploadImages(files);
         return ResponseEntity.ok(imageUrls);
     }
