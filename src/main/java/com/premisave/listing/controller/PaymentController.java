@@ -1,24 +1,31 @@
 package com.premisave.listing.controller;
 
+import com.premisave.listing.dto.MpesaStkPushRequest;
 import com.premisave.listing.entity.Payment;
 import com.premisave.listing.enums.PaymentMethod;
+import com.premisave.listing.service.MpesaService;
 import com.premisave.listing.service.PaymentService;
 import com.premisave.listing.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/payments")
 @RequiredArgsConstructor
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final MpesaService mpesaService;
     private final JwtUtil jwtUtil;
 
+    // Traditional Payment
     @PostMapping
     public ResponseEntity<Payment> processPayment(
             @RequestParam String subscriptionId,
@@ -27,23 +34,51 @@ public class PaymentController {
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        
         Payment payment = paymentService.processPayment(userId, subscriptionId, amount, method);
         return ResponseEntity.ok(payment);
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<List<Payment>> getMyPayments(
+    // ====================== M-PESA STK PUSH ======================
+    @PostMapping("/mpesa/stkpush")
+    public ResponseEntity<Map<String, Object>> initiateMpesaStkPush(
+            @RequestBody MpesaStkPushRequest request,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        List<Payment> payments = paymentService.getUserPayments(userId);
-        return ResponseEntity.ok(payments);
+        Map<String, Object> response = mpesaService.initiateStkPush(request);
+        
+        log.info("M-Pesa STK Push initiated for user: {}", userId);
+        return ResponseEntity.ok(response);
+    }
+
+    // ====================== M-PESA CALLBACKS (PUBLIC - NO AUTH) ======================
+    @PostMapping("/mpesa/callback")
+    public ResponseEntity<String> mpesaStkCallback(@RequestBody Map<String, Object> callbackData) {
+        log.info("M-Pesa STK Callback Received");
+        paymentService.handleMpesaCallback(callbackData);
+        return ResponseEntity.ok("Success");
+    }
+
+    @PostMapping("/mpesa/confirmation")
+    public ResponseEntity<String> mpesaConfirmation(@RequestBody Map<String, Object> payload) {
+        log.info("M-Pesa C2B Confirmation Received: {}", payload);
+        return ResponseEntity.ok("Confirmation received");
+    }
+
+    @PostMapping("/mpesa/validation")
+    public ResponseEntity<String> mpesaValidation(@RequestBody Map<String, Object> payload) {
+        log.info("M-Pesa C2B Validation Received: {}", payload);
+        return ResponseEntity.ok("Validation successful");
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<List<Payment>> getMyPayments(@RequestHeader("Authorization") String authorization) {
+        String userId = jwtUtil.extractUserId(authorization);
+        return ResponseEntity.ok(paymentService.getUserPayments(userId));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Payment> getPaymentById(@PathVariable String id) {
-        Payment payment = paymentService.getPaymentById(id);
-        return ResponseEntity.ok(payment);
+        return ResponseEntity.ok(paymentService.getPaymentById(id));
     }
 }

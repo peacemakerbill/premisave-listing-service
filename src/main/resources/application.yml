@@ -11,12 +11,12 @@ spring:
 server:
   port: 8082
 
-# Auth Service Integration
+# Auth Service
 auth:
   service:
     url: http://localhost:8080
 
-# JWT (same secret as auth service)
+# JWT
 jwt:
   secret: eW91ci12ZXJ5LXNlY3VyZS1qd3Qtc2VjcmV0LWtleS0zMi1ieXRlcyE=
 
@@ -30,11 +30,23 @@ cloudinary:
 rate-limit:
   requests-per-minute: 100
 
-# Ad Promotion Configuration
+# Ad Promotion
 ad:
   promotion:
     daily-rate: 2.99
     default-currency: USD
+
+# ====================== M-PESA DARAJA CONFIG ======================
+mpesa:
+  daraja:
+    consumer-key: ${MPESA_CONSUMER_KEY:your_consumer_key_here}
+    consumer-secret: ${MPESA_CONSUMER_SECRET:your_consumer_secret_here}
+    shortcode: ${MPESA_SHORTCODE:174379}           # Your Paybill
+    passkey: ${MPESA_PASSKEY:your_passkey_here}
+    callback-url: ${MPESA_CALLBACK_URL:http://localhost:8082/api/payments/mpesa/callback}
+    confirmation-url: ${MPESA_CONFIRMATION_URL:http://localhost:8082/api/payments/mpesa/confirmation}
+    validation-url: ${MPESA_VALIDATION_URL:http://localhost:8082/api/payments/mpesa/validation}
+    environment: sandbox                              # Change to "production" for live
 
 frontend:
   url: http://localhost:3000
