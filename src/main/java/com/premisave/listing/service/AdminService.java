@@ -35,6 +35,19 @@ public class AdminService {
         return allListings;
     }
 
+    /**
+     * Get listing by ID for Admin (supports all listing types)
+     */
+    public Object getListingById(String id) {
+        return shortTermRentalRepository.findById(id)
+                .map(listing -> (Object) listing)
+                .or(() -> longTermRentalRepository.findById(id).map(l -> (Object) l))
+                .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
+                .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
+                .or(() -> leaseRepository.findById(id).map(l -> (Object) l))
+                .orElseThrow(() -> new RuntimeException("Listing not found with id: " + id));
+    }
+
     @Transactional
     public String approveListing(String id) {
         Listing listing = findListingById(id);

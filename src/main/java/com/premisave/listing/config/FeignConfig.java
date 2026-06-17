@@ -8,9 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class FeignConfig {
 
     @Bean
-    public RequestInterceptor requestInterceptor() {
-        return requestTemplate -> {
-            // Token will be added dynamically via JwtFeignInterceptor
-        };
+    public RequestInterceptor requestInterceptor(JwtFeignInterceptor jwtFeignInterceptor) {
+        return jwtFeignInterceptor;
     }
 }

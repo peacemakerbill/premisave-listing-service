@@ -1,20 +1,17 @@
 package com.premisave.listing.client;
 
+import com.premisave.listing.config.FeignConfig;
+import com.premisave.listing.dto.auth_service.*;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
-import com.premisave.listing.dto.auth_service.ProfileViewResponse;
-import com.premisave.listing.dto.auth_service.ProfileViewStats;
-import com.premisave.listing.dto.auth_service.ReviewResponse;
-import com.premisave.listing.dto.auth_service.SocialActionRequest;
-import com.premisave.listing.dto.auth_service.SocialActionResponse;
-import com.premisave.listing.dto.auth_service.UserInteractionResponse;
-import com.premisave.listing.dto.auth_service.UserSummaryResponse;
-import com.premisave.listing.dto.auth_service.WhoIViewedResponse;
-
 import java.util.List;
 
-@FeignClient(name = "auth-service", url = "${auth.service.url:http://localhost:8080}")
+@FeignClient(
+    name = "auth-service", 
+    url = "${auth.service.url:http://localhost:8080}",
+    configuration = FeignConfig.class
+)
 public interface AuthServiceClient {
 
     // ── Profile ─────────────────────────────────────────────────────
