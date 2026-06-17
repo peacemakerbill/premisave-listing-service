@@ -36,11 +36,11 @@ public class AdminService {
     }
 
     /**
-     * Get listing by ID for Admin (supports all listing types)
+     * Get single listing by ID (supports all types)
      */
     public Object getListingById(String id) {
         return shortTermRentalRepository.findById(id)
-                .map(listing -> (Object) listing)
+                .map(l -> (Object) l)
                 .or(() -> longTermRentalRepository.findById(id).map(l -> (Object) l))
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))

@@ -1,10 +1,6 @@
 package com.premisave.listing.service;
 
-import com.premisave.listing.entity.HouseSale;
-import com.premisave.listing.entity.LandSale;
-import com.premisave.listing.entity.Lease;
-import com.premisave.listing.entity.LongTermRental;
-import com.premisave.listing.entity.ShortTermRental;
+import com.premisave.listing.entity.*;
 import com.premisave.listing.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +26,7 @@ public class LocationService {
     private final LeaseRepository leaseRepository;
 
     /**
-     * Find listings near a specific location (using bounding box approximation)
+     * Find listings near a specific location using bounding box approximation
      */
     public List<Object> findNearbyListings(Double latitude, Double longitude, Double radiusKm) {
         if (latitude == null || longitude == null || radiusKm == null || radiusKm <= 0) {
@@ -70,13 +66,12 @@ public class LocationService {
         }
 
         String cityLower = city.trim().toLowerCase();
-
         List<Object> results = new ArrayList<>();
-        
-        // Short term rentals have dedicated query method
+
+        // Short term rentals - use repository method
         results.addAll(shortTermRentalRepository.findByCityAndActiveTrue(city));
 
-        // Other types - manual filter
+        // Other types - filter manually
         results.addAll(longTermRentalRepository.findAll().stream()
                 .filter(l -> l.getCity() != null && l.getCity().toLowerCase().contains(cityLower))
                 .toList());
@@ -95,7 +90,7 @@ public class LocationService {
     }
 
     /**
-     * Find listings within map bounds (for frontend map)
+     * Find listings within map bounds (for frontend map view)
      */
     public List<Object> findListingsInBounds(Double minLat, Double maxLat, 
                                            Double minLng, Double maxLng) {
