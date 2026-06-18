@@ -18,6 +18,5 @@ public class Subscription extends BaseEntity {
     private BigDecimal amount;
     private LocalDateTime startDate;
     private LocalDateTime endDate;
-    private boolean active = true;
     private String paymentId;
 }
