@@ -15,8 +15,13 @@ public class SocialService {
 
     private final AuthServiceClient authServiceClient;
 
-    // ====================== SOCIAL ACTIONS ======================
+    // ====================== CURRENT USER PROFILE ======================
+    public UserSummaryResponse getCurrentUserProfile(String token) {
+        log.info("Fetching current user profile via Auth Service");
+        return authServiceClient.getCurrentUser(token);
+    }
 
+    // ====================== SOCIAL ACTIONS ======================
     public SocialActionResponse likeUser(SocialActionRequest request, String token) {
         return authServiceClient.likeUser(request, token);
     }
@@ -62,24 +67,19 @@ public class SocialService {
     }
 
     // ====================== PROFILE METHODS ======================
-
     public List<UserSummaryResponse> searchUsers(String query, String token) {
-        log.info("Searching users with query: {}", query);
         return authServiceClient.searchUsers(query, token);
     }
 
     public List<UserSummaryResponse> getAllUsers(String token) {
-        log.info("Fetching all users");
         return authServiceClient.getAllUsers(token);
     }
 
     public UserSummaryResponse getUserProfile(String userId, String token) {
-        log.info("Fetching profile for user: {}", userId);
         return authServiceClient.getUserSummary(userId, token);
     }
 
     // ====================== PROFILE VIEWS ======================
-
     public ProfileViewResponse recordProfileView(String targetId, String token) {
         return authServiceClient.recordProfileView(targetId, token);
     }

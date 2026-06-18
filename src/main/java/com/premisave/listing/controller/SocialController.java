@@ -3,17 +3,50 @@ package com.premisave.listing.controller;
 import com.premisave.listing.dto.auth_service.*;
 import com.premisave.listing.service.SocialService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/social")
 @RequiredArgsConstructor
 public class SocialController {
 
     private final SocialService socialService;
+
+    // ====================== PROFILE ENDPOINTS ======================
+
+    @GetMapping("/profile/me")
+    public ResponseEntity<UserSummaryResponse> getCurrentUserProfile(
+            @RequestHeader("Authorization") String token) {
+        
+        log.info("Received request for /social/profile/me");
+        UserSummaryResponse user = socialService.getCurrentUserProfile(token);
+        return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/profile/user/{userId}")
+    public ResponseEntity<UserSummaryResponse> getUserProfile(
+            @PathVariable String userId,
+            @RequestHeader("Authorization") String token) {
+        return ResponseEntity.ok(socialService.getUserProfile(userId, token));
+    }
+
+    @GetMapping("/profile/search")
+    public ResponseEntity<List<UserSummaryResponse>> searchUsers(
+            @RequestParam String query,
+            @RequestHeader("Authorization") String token) {
+        return ResponseEntity.ok(socialService.searchUsers(query, token));
+    }
+
+    @GetMapping("/profile/all")
+    public ResponseEntity<List<UserSummaryResponse>> getAllUsers(
+            @RequestHeader("Authorization") String token) {
+        return ResponseEntity.ok(socialService.getAllUsers(token));
+    }
 
     // ====================== SOCIAL ACTIONS ======================
     @PostMapping("/like")
@@ -80,29 +113,7 @@ public class SocialController {
         return ResponseEntity.ok(socialService.getMyFollowing(token));
     }
 
-    // ====================== PROFILE ENDPOINTS ======================
-
-    @GetMapping("/profile/search")
-    public ResponseEntity<List<UserSummaryResponse>> searchUsers(
-            @RequestParam String query,
-            @RequestHeader("Authorization") String token) {
-        return ResponseEntity.ok(socialService.searchUsers(query, token));
-    }
-
-    @GetMapping("/profile/all")
-    public ResponseEntity<List<UserSummaryResponse>> getAllUsers(@RequestHeader("Authorization") String token) {
-        return ResponseEntity.ok(socialService.getAllUsers(token));
-    }
-
-    @GetMapping("/profile/user/{userId}")
-    public ResponseEntity<UserSummaryResponse> getUserProfile(
-            @PathVariable String userId,
-            @RequestHeader("Authorization") String token) {
-        return ResponseEntity.ok(socialService.getUserProfile(userId, token));
-    }
-
     // ====================== PROFILE VIEWS ======================
-
     @PostMapping("/views/{targetId}")
     public ResponseEntity<ProfileViewResponse> recordProfileView(
             @PathVariable String targetId,
