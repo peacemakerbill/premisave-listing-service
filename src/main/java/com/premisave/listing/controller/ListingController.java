@@ -13,10 +13,12 @@ import com.premisave.listing.service.ListingService;
 import com.premisave.listing.util.JwtUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -28,41 +30,74 @@ public class ListingController {
     private final AdPromotionService adPromotionService;
     private final JwtUtil jwtUtil;
 
-    // ====================== CRUD OPERATIONS ======================
-    @PostMapping
+    // ====================== CREATE LISTING WITH IMAGES ======================
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ListingResponse> createListing(
-            @Valid @RequestBody ListingRequest request,
+            @RequestPart("request") @Valid ListingRequest request,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
+
+        // Upload images if provided
+        if (files != null && !files.isEmpty()) {
+            List<String> imageUrls = listingService.uploadImages(files);
+            request.setImageUrls(imageUrls);
+
+            if (!imageUrls.isEmpty() && (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank())) {
+                request.setMainImageUrl(imageUrls.get(0));
+            }
+        }
+
         ListingResponse response = listingService.createListing(request, authorization);
         return ResponseEntity.ok(response);
     }
 
+    // ====================== UPDATE LISTING WITH IMAGES ======================
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ListingResponse> updateListing(
+            @PathVariable String id,
+            @RequestPart("request") @Valid ListingRequest request,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files,
+            @RequestHeader("Authorization") String authorization) {
+
+        String userId = jwtUtil.extractUserId(authorization);
+
+        // Handle new image uploads
+        if (files != null && !files.isEmpty()) {
+            List<String> newImageUrls = listingService.uploadImages(files);
+
+            if (request.getImageUrls() == null) {
+                request.setImageUrls(new ArrayList<>());
+            }
+            request.getImageUrls().addAll(newImageUrls);
+
+            // Set main image if not provided
+            if ((request.getMainImageUrl() == null || request.getMainImageUrl().isBlank()) 
+                    && !newImageUrls.isEmpty()) {
+                request.setMainImageUrl(newImageUrls.get(0));
+            }
+        }
+
+        ListingResponse response = listingService.updateListing(id, request, userId);
+        return ResponseEntity.ok(response);
+    }
+
+    // ====================== OTHER ENDPOINTS ======================
     @GetMapping("/{id}")
     public ResponseEntity<Object> getListingById(@PathVariable String id) {
         Object listing = listingService.getListingById(id);
         return ResponseEntity.ok(listing);
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<ListingResponse> updateListing(
-            @PathVariable String id,
-            @Valid @RequestBody ListingRequest request,
-            @RequestHeader("Authorization") String authorization) {
-        String userId = jwtUtil.extractUserId(authorization);
-        ListingResponse response = listingService.updateListing(id, request, userId);
-        return ResponseEntity.ok(response);
-    }
-
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteListing(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorization) {
+        
         String userId = jwtUtil.extractUserId(authorization);
         String message = listingService.deleteListing(id, userId);
         return ResponseEntity.ok(message);
     }
 
-    // ====================== MY LISTINGS ======================
     @GetMapping("/me")
     public ResponseEntity<List<MyListingResponse>> getMyListings(
             @RequestHeader("Authorization") String authorization,
@@ -73,7 +108,7 @@ public class ListingController {
         return ResponseEntity.ok(listings);
     }
 
-    // ====================== AD PROMOTION ======================
+    // ====================== PROMOTION ======================
     @PostMapping("/promote")
     public ResponseEntity<AdPromotionResponse> promoteListing(
             @Valid @RequestBody AdPromotionRequest request,
@@ -102,7 +137,7 @@ public class ListingController {
         return ResponseEntity.ok(adPromotionService.getUserPromotions(userId));
     }
 
-    // ====================== OTHER ENDPOINTS ======================
+    // ====================== DISCOVERY ======================
     @GetMapping("/short-term")
     public ResponseEntity<List<ShortTermRental>> getShortTermRentals(
             @RequestParam(required = false) String city) {
@@ -123,10 +158,12 @@ public class ListingController {
             @RequestParam(required = false) Double minPrice,
             @RequestParam(required = false) Double maxPrice,
             @RequestParam(required = false) String city) {
+        
         List<?> results = listingService.searchListings(query, category, minPrice, maxPrice, city);
         return ResponseEntity.ok(results);
     }
 
+    // Legacy image upload endpoint (kept for backward compatibility)
     @PostMapping("/upload-images")
     public ResponseEntity<List<String>> uploadImages(
             @RequestParam("files") List<MultipartFile> files,

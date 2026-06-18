@@ -49,6 +49,11 @@ public class ListingService {
             throw new RuntimeException("User not authenticated");
         }
 
+        // Ensure imageUrls is never null
+        if (request.getImageUrls() == null) {
+            request.setImageUrls(new ArrayList<>());
+        }
+
         Listing listing = createSpecificListing(request);
 
         listing.setOwnerId(user.getId());
@@ -62,7 +67,7 @@ public class ListingService {
         listing.setCity(request.getCity());
         listing.setCountry(request.getCountry());
         listing.setMainImageUrl(request.getMainImageUrl());
-        listing.setImageUrls(request.getImageUrls() != null ? request.getImageUrls() : new ArrayList<>());
+        listing.setImageUrls(request.getImageUrls());
         listing.setStatus(ListingStatus.ACTIVE);
 
         listing = saveListing(listing);
@@ -184,6 +189,7 @@ public class ListingService {
             throw new RuntimeException("You can only update your own listings");
         }
 
+        // Update basic fields
         existing.setTitle(request.getTitle());
         existing.setDescription(request.getDescription());
         existing.setPrice(request.getPrice());
@@ -192,14 +198,22 @@ public class ListingService {
         existing.setAddress(request.getAddress());
         existing.setCity(request.getCity());
         existing.setCountry(request.getCountry());
-        existing.setMainImageUrl(request.getMainImageUrl());
 
+        // Update main image if provided
+        if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
+            existing.setMainImageUrl(request.getMainImageUrl());
+        }
+
+        // Handle image URLs - allow full replacement or adding new ones
         if (request.getImageUrls() != null) {
             existing.setImageUrls(request.getImageUrls());
         }
 
         updateSpecificFields(existing, request);
         Listing saved = saveListing(existing);
+
+        log.info("Listing updated: {} by user {}", saved.getId(), userId);
+
         return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
     }
 
@@ -291,7 +305,6 @@ public class ListingService {
         };
     }
 
-    // ====================== IMPROVED PUBLIC QUERIES ======================
     public List<?> getListingsByCategory(ListingCategory category, String city) {
         if (category == null) return List.of();
 
@@ -321,7 +334,6 @@ public class ListingService {
         if (category != null) {
             candidates = getListingsByCategory(category, city);
         } else {
-            // Fetch all listings across every type
             List<Object> all = new ArrayList<>();
             all.addAll(shortTermRentalRepository.findAll());
             all.addAll(longTermRentalRepository.findAll());
@@ -344,12 +356,10 @@ public class ListingService {
         if (listing.getStatus() == ListingStatus.REJECTED) return false;
         if (listing.getStatus() == ListingStatus.ACTIVE) return true;
 
-        // Check promotion
         return listing.isPromoted() && listing.getPromotionEndDate() != null 
                 && listing.getPromotionEndDate().isAfter(LocalDateTime.now());
     }
 
-    // ====================== MY LISTINGS ======================
     public List<MyListingResponse> getMyListings(String ownerId, ListingStatus statusFilter) {
         if (ownerId == null || ownerId.trim().isEmpty()) {
             return List.of();
