@@ -114,6 +114,16 @@ public class ListingController {
         return ResponseEntity.ok(message);
     }
 
+    @PostMapping("/{id}/unarchive")
+    public ResponseEntity<String> unarchiveListing(
+            @PathVariable String id,
+            @RequestHeader("Authorization") String authorization) {
+
+        String userId = jwtUtil.extractUserId(authorization);
+        String message = listingService.unarchiveListing(id, userId);
+        return ResponseEntity.ok(message);
+    }
+
     @GetMapping("/me")
     public ResponseEntity<List<MyListingResponse>> getMyListings(
             @RequestHeader("Authorization") String authorization,

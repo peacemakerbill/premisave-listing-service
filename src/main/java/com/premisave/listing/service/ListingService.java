@@ -301,6 +301,9 @@ public class ListingService {
         if (!listing.getOwnerId().equals(userId)) {
             throw new RuntimeException("You can only delete your own listings");
         }
+        if (listing.isDeleted()) {
+            throw new RuntimeException("Listing has already been deleted");
+        }
         listing.setDeleted(true);
         listing.setDeletedAt(LocalDateTime.now());
         listing.setActive(false);
@@ -317,10 +320,31 @@ public class ListingService {
         if (listing.isDeleted()) {
             throw new RuntimeException("Listing has been deleted and cannot be archived");
         }
+        if (listing.isArchived()) {
+            throw new RuntimeException("Listing is already archived");
+        }
         listing.setArchived(true);
         listing.setActive(false);
         saveListing(listing);
         return "Listing archived successfully";
+    }
+
+    @Transactional
+    public String unarchiveListing(String id, String userId) {
+        Listing listing = (Listing) getListingById(id);
+        if (!listing.getOwnerId().equals(userId)) {
+            throw new RuntimeException("You can only unarchive your own listings");
+        }
+        if (listing.isDeleted()) {
+            throw new RuntimeException("Listing has been deleted and cannot be unarchived");
+        }
+        if (!listing.isArchived()) {
+            throw new RuntimeException("Listing is not archived — nothing to unarchive");
+        }
+        listing.setArchived(false);
+        listing.setActive(true);
+        saveListing(listing);
+        return "Listing unarchived successfully";
     }
 
     // ====================== DISCOVERY ======================
