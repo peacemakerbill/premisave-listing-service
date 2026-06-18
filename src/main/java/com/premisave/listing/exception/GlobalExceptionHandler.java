@@ -1,6 +1,7 @@
 package com.premisave.listing.exception;
 
 import com.premisave.listing.dto.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -29,6 +31,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<String>> handleRuntimeException(RuntimeException ex) {
+        log.error("RuntimeException: {}", ex.getMessage(), ex);
         ApiResponse<String> response = new ApiResponse<>(
             false, ex.getMessage(), null
         );
@@ -37,8 +40,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<String>> handleGeneralException(Exception ex) {
+        log.error("Unexpected error occurred", ex);   // Important for debugging
         ApiResponse<String> response = new ApiResponse<>(
-            false, "An unexpected error occurred", null
+            false, 
+            "An unexpected error occurred: " + ex.getClass().getSimpleName() + " - " + ex.getMessage(), 
+            null
         );
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }

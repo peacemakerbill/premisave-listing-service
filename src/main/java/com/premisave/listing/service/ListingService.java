@@ -44,37 +44,42 @@ public class ListingService {
 
     @Transactional
     public ListingResponse createListing(ListingRequest request, String authorizationHeader) {
-        UserSummaryResponse user = authServiceClient.getCurrentUser(authorizationHeader);
-        if (user == null) {
-            throw new RuntimeException("User not authenticated");
+        try {
+            UserSummaryResponse user = authServiceClient.getCurrentUser(authorizationHeader);
+            if (user == null || user.getId() == null) {
+                throw new RuntimeException("User authentication failed. Please login again.");
+            }
+
+            if (request.getImageUrls() == null) {
+                request.setImageUrls(new ArrayList<>());
+            }
+
+            Listing listing = createSpecificListing(request);
+
+            listing.setOwnerId(user.getId());
+            listing.setTitle(request.getTitle());
+            listing.setDescription(request.getDescription());
+            listing.setCategory(request.getCategory());
+            listing.setPrice(request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO);
+            listing.setLatitude(request.getLatitude());
+            listing.setLongitude(request.getLongitude());
+            listing.setAddress(request.getAddress());
+            listing.setCity(request.getCity());
+            listing.setCountry(request.getCountry() != null ? request.getCountry() : "Kenya");
+            listing.setMainImageUrl(request.getMainImageUrl());
+            listing.setImageUrls(request.getImageUrls());
+            listing.setStatus(ListingStatus.ACTIVE);
+
+            listing = saveListing(listing);
+
+            log.info("New listing created successfully: ID={} by user={}", listing.getId(), user.getId());
+
+            return new ListingResponse("Listing created successfully", listing.getId(), listing.getTitle(), true);
+
+        } catch (Exception e) {
+            log.error("Error while creating listing", e);
+            throw new RuntimeException("Failed to create listing: " + e.getMessage(), e);
         }
-
-        // Ensure imageUrls is never null
-        if (request.getImageUrls() == null) {
-            request.setImageUrls(new ArrayList<>());
-        }
-
-        Listing listing = createSpecificListing(request);
-
-        listing.setOwnerId(user.getId());
-        listing.setTitle(request.getTitle());
-        listing.setDescription(request.getDescription());
-        listing.setCategory(request.getCategory());
-        listing.setPrice(request.getPrice());
-        listing.setLatitude(request.getLatitude());
-        listing.setLongitude(request.getLongitude());
-        listing.setAddress(request.getAddress());
-        listing.setCity(request.getCity());
-        listing.setCountry(request.getCountry());
-        listing.setMainImageUrl(request.getMainImageUrl());
-        listing.setImageUrls(request.getImageUrls());
-        listing.setStatus(ListingStatus.ACTIVE);
-
-        listing = saveListing(listing);
-
-        log.info("New listing created: {} by user {}", listing.getId(), user.getId());
-
-        return new ListingResponse("Listing created successfully", listing.getId(), listing.getTitle(), true);
     }
 
     private Listing createSpecificListing(ListingRequest request) {
@@ -149,10 +154,19 @@ public class ListingService {
         if (file == null || file.isEmpty()) {
             return null;
         }
-        Map<String, Object> uploadParams = new HashMap<>();
-        uploadParams.put("folder", "premisave/listings");
-        Map<?, ?> uploadResult = cloudinary.uploader().upload(file.getBytes(), uploadParams);
-        return (String) uploadResult.get("secure_url");
+        try {
+            Map<String, Object> uploadParams = new HashMap<>();
+            uploadParams.put("folder", "premisave/listings");
+            uploadParams.put("resource_type", "auto");
+
+            Map<?, ?> uploadResult = cloudinary.uploader().upload(file.getBytes(), uploadParams);
+            String url = (String) uploadResult.get("secure_url");
+            log.info("Image uploaded successfully: {}", url);
+            return url;
+        } catch (Exception e) {
+            log.error("Cloudinary upload failed for file: {}", file.getOriginalFilename(), e);
+            throw new RuntimeException("Image upload failed: " + e.getMessage());
+        }
     }
 
     public List<String> uploadImages(List<MultipartFile> files) {
@@ -163,8 +177,8 @@ public class ListingService {
                 .map(file -> {
                     try {
                         return uploadImage(file);
-                    } catch (IOException e) {
-                        log.error("Failed to upload image: {}", e.getMessage());
+                    } catch (Exception e) {
+                        log.warn("Failed to upload image {}: {}", file.getOriginalFilename(), e.getMessage());
                         return null;
                     }
                 })
@@ -184,37 +198,39 @@ public class ListingService {
 
     @Transactional
     public ListingResponse updateListing(String id, ListingRequest request, String userId) {
-        Listing existing = (Listing) getListingById(id);
-        if (!existing.getOwnerId().equals(userId)) {
-            throw new RuntimeException("You can only update your own listings");
+        try {
+            Listing existing = (Listing) getListingById(id);
+            if (!existing.getOwnerId().equals(userId)) {
+                throw new RuntimeException("You can only update your own listings");
+            }
+
+            existing.setTitle(request.getTitle());
+            existing.setDescription(request.getDescription());
+            existing.setPrice(request.getPrice());
+            existing.setLatitude(request.getLatitude());
+            existing.setLongitude(request.getLongitude());
+            existing.setAddress(request.getAddress());
+            existing.setCity(request.getCity());
+            existing.setCountry(request.getCountry());
+
+            if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
+                existing.setMainImageUrl(request.getMainImageUrl());
+            }
+
+            if (request.getImageUrls() != null) {
+                existing.setImageUrls(request.getImageUrls());
+            }
+
+            updateSpecificFields(existing, request);
+            Listing saved = saveListing(existing);
+
+            log.info("Listing updated: {} by user {}", saved.getId(), userId);
+
+            return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
+        } catch (Exception e) {
+            log.error("Error updating listing {}", id, e);
+            throw new RuntimeException("Failed to update listing: " + e.getMessage(), e);
         }
-
-        // Update basic fields
-        existing.setTitle(request.getTitle());
-        existing.setDescription(request.getDescription());
-        existing.setPrice(request.getPrice());
-        existing.setLatitude(request.getLatitude());
-        existing.setLongitude(request.getLongitude());
-        existing.setAddress(request.getAddress());
-        existing.setCity(request.getCity());
-        existing.setCountry(request.getCountry());
-
-        // Update main image if provided
-        if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
-            existing.setMainImageUrl(request.getMainImageUrl());
-        }
-
-        // Handle image URLs - allow full replacement or adding new ones
-        if (request.getImageUrls() != null) {
-            existing.setImageUrls(request.getImageUrls());
-        }
-
-        updateSpecificFields(existing, request);
-        Listing saved = saveListing(existing);
-
-        log.info("Listing updated: {} by user {}", saved.getId(), userId);
-
-        return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
     }
 
     private void updateSpecificFields(Listing listing, ListingRequest request) {

@@ -30,14 +30,14 @@ public class ListingController {
     private final AdPromotionService adPromotionService;
     private final JwtUtil jwtUtil;
 
-    // ====================== CREATE LISTING WITH IMAGES ======================
+    // ====================== CREATE LISTING ======================
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ListingResponse> createListing(
             @RequestPart("request") @Valid ListingRequest request,
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
 
-        // Upload images if provided
+        // Upload images only if files are provided
         if (files != null && !files.isEmpty()) {
             List<String> imageUrls = listingService.uploadImages(files);
             request.setImageUrls(imageUrls);
@@ -45,13 +45,18 @@ public class ListingController {
             if (!imageUrls.isEmpty() && (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank())) {
                 request.setMainImageUrl(imageUrls.get(0));
             }
+        } else {
+            // Ensure imageUrls is never null even when no files are uploaded
+            if (request.getImageUrls() == null) {
+                request.setImageUrls(new ArrayList<>());
+            }
         }
 
         ListingResponse response = listingService.createListing(request, authorization);
         return ResponseEntity.ok(response);
     }
 
-    // ====================== UPDATE LISTING WITH IMAGES ======================
+    // ====================== UPDATE LISTING ======================
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ListingResponse> updateListing(
             @PathVariable String id,
@@ -61,7 +66,7 @@ public class ListingController {
 
         String userId = jwtUtil.extractUserId(authorization);
 
-        // Handle new image uploads
+        // Handle new image uploads if provided
         if (files != null && !files.isEmpty()) {
             List<String> newImageUrls = listingService.uploadImages(files);
 
@@ -163,7 +168,7 @@ public class ListingController {
         return ResponseEntity.ok(results);
     }
 
-    // Legacy image upload endpoint (kept for backward compatibility)
+    // Legacy image upload endpoint
     @PostMapping("/upload-images")
     public ResponseEntity<List<String>> uploadImages(
             @RequestParam("files") List<MultipartFile> files,
