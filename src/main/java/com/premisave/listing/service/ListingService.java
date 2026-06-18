@@ -248,7 +248,7 @@ public class ListingService {
 
     // ====================== UPDATE SPECIFIC FIELDS ======================
 
-    private void updateSpecificFields(Listing listing, ListingRequest request) {
+    private void updateSpecificFields(Listing listing, ListingUpdateRequest request) {
         if (listing instanceof ShortTermRental st) updateShortTermRental(st, request);
         else if (listing instanceof LongTermRental lt) updateLongTermRental(lt, request);
         else if (listing instanceof LandSale ls) updateLandSale(ls, request);
@@ -256,7 +256,7 @@ public class ListingService {
         else if (listing instanceof Lease lease) updateLease(lease, request);
     }
 
-    private void updateShortTermRental(ShortTermRental st, ListingRequest r) {
+    private void updateShortTermRental(ShortTermRental st, ListingUpdateRequest r) {
         if (r.getMaxGuests() != null) st.setMaxGuests(r.getMaxGuests());
         if (r.getBedrooms() != null) st.setBedrooms(r.getBedrooms());
         if (r.getBathrooms() != null) st.setBathrooms(r.getBathrooms());
@@ -265,19 +265,19 @@ public class ListingService {
         if (r.getAmenities() != null) st.setAmenities(r.getAmenities());
     }
 
-    private void updateLongTermRental(LongTermRental lt, ListingRequest r) {
+    private void updateLongTermRental(LongTermRental lt, ListingUpdateRequest r) {
         if (r.getMinLeaseMonths() != null) lt.setMinLeaseMonths(r.getMinLeaseMonths());
         if (r.getFurnished() != null) lt.setFurnished(r.getFurnished());
         if (r.getTenantRequirements() != null) lt.setTenantRequirements(r.getTenantRequirements());
     }
 
-    private void updateLandSale(LandSale ls, ListingRequest r) {
+    private void updateLandSale(LandSale ls, ListingUpdateRequest r) {
         if (r.getSizeInAcres() != null) ls.setSizeInAcres(r.getSizeInAcres());
         if (r.getLandUseType() != null) ls.setLandUseType(r.getLandUseType());
         if (r.getHasTitleDeed() != null) ls.setHasTitleDeed(r.getHasTitleDeed());
     }
 
-    private void updateHouseSale(HouseSale hs, ListingRequest r) {
+    private void updateHouseSale(HouseSale hs, ListingUpdateRequest r) {
         if (r.getBedrooms() != null) hs.setBedrooms(r.getBedrooms());
         if (r.getBathrooms() != null) hs.setBathrooms(r.getBathrooms());
         if (r.getFloors() != null) hs.setFloors(r.getFloors());
@@ -286,7 +286,7 @@ public class ListingService {
         if (r.getPropertyType() != null) hs.setPropertyType(r.getPropertyType());
     }
 
-    private void updateLease(Lease lease, ListingRequest r) {
+    private void updateLease(Lease lease, ListingUpdateRequest r) {
         if (r.getLeaseDurationMonths() != null) lease.setLeaseDurationMonths(r.getLeaseDurationMonths());
         if (r.getDepositAmount() != null) lease.setDepositAmount(r.getDepositAmount());
         if (r.getLeaseTerms() != null) lease.setLeaseTerms(r.getLeaseTerms());
@@ -301,10 +301,26 @@ public class ListingService {
         if (!listing.getOwnerId().equals(userId)) {
             throw new RuntimeException("You can only delete your own listings");
         }
+        listing.setDeleted(true);
+        listing.setDeletedAt(LocalDateTime.now());
         listing.setActive(false);
-        listing.setArchived(true);
         saveListing(listing);
-        return "Listing has been archived successfully";
+        return "Listing deleted successfully";
+    }
+
+    @Transactional
+    public String archiveListing(String id, String userId) {
+        Listing listing = (Listing) getListingById(id);
+        if (!listing.getOwnerId().equals(userId)) {
+            throw new RuntimeException("You can only archive your own listings");
+        }
+        if (listing.isDeleted()) {
+            throw new RuntimeException("Listing has been deleted and cannot be archived");
+        }
+        listing.setArchived(true);
+        listing.setActive(false);
+        saveListing(listing);
+        return "Listing archived successfully";
     }
 
     // ====================== DISCOVERY ======================
@@ -387,6 +403,7 @@ public class ListingService {
     }
 
     private boolean isListingVisible(Listing listing) {
+        if (listing.isDeleted()) return false;
         if (!listing.isActive() || listing.isArchived()) return false;
         if (listing.getStatus() == ListingStatus.REJECTED) return false;
         if (listing.getStatus() == ListingStatus.ACTIVE) return true;

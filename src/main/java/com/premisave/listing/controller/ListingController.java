@@ -104,6 +104,16 @@ public class ListingController {
         return ResponseEntity.ok(message);
     }
 
+    @PostMapping("/{id}/archive")
+    public ResponseEntity<String> archiveListing(
+            @PathVariable String id,
+            @RequestHeader("Authorization") String authorization) {
+
+        String userId = jwtUtil.extractUserId(authorization);
+        String message = listingService.archiveListing(id, userId);
+        return ResponseEntity.ok(message);
+    }
+
     @GetMapping("/me")
     public ResponseEntity<List<MyListingResponse>> getMyListings(
             @RequestHeader("Authorization") String authorization,

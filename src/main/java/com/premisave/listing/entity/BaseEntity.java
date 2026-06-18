@@ -25,4 +25,11 @@ public abstract class BaseEntity {
 
     @Field("archived")
     private boolean archived = false;
+
+    // Soft delete — record stays in DB but is invisible to users
+    @Field("deleted")
+    private boolean deleted = false;
+
+    @Field("deleted_at")
+    private LocalDateTime deletedAt;
 }
