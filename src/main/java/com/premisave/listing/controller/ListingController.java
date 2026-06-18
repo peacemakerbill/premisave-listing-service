@@ -3,6 +3,7 @@ package com.premisave.listing.controller;
 import com.premisave.listing.dto.AdPromotionRequest;
 import com.premisave.listing.dto.AdPromotionResponse;
 import com.premisave.listing.dto.ListingRequest;
+import com.premisave.listing.dto.ListingUpdateRequest;
 import com.premisave.listing.dto.ListingResponse;
 import com.premisave.listing.dto.MyListingResponse;
 import com.premisave.listing.entity.ShortTermRental;
@@ -37,16 +38,17 @@ public class ListingController {
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
 
-        // Upload images only if files are provided
-        if (files != null && !files.isEmpty()) {
-            List<String> imageUrls = listingService.uploadImages(files);
-            request.setImageUrls(imageUrls);
+        List<MultipartFile> validFiles = files != null
+                ? files.stream().filter(f -> f != null && !f.isEmpty()).toList()
+                : List.of();
 
+        if (!validFiles.isEmpty()) {
+            List<String> imageUrls = listingService.uploadImages(validFiles);
+            request.setImageUrls(imageUrls);
             if (!imageUrls.isEmpty() && (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank())) {
                 request.setMainImageUrl(imageUrls.get(0));
             }
         } else {
-            // Ensure imageUrls is never null even when no files are uploaded
             if (request.getImageUrls() == null) {
                 request.setImageUrls(new ArrayList<>());
             }
@@ -60,24 +62,23 @@ public class ListingController {
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ListingResponse> updateListing(
             @PathVariable String id,
-            @RequestPart("request") @Valid ListingRequest request,
+            @RequestPart("request") @Valid ListingUpdateRequest request,
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
 
-        // Handle new image uploads if provided
-        if (files != null && !files.isEmpty()) {
-            List<String> newImageUrls = listingService.uploadImages(files);
+        List<MultipartFile> validFiles = files != null
+                ? files.stream().filter(f -> f != null && !f.isEmpty()).toList()
+                : List.of();
 
+        if (!validFiles.isEmpty()) {
+            List<String> newImageUrls = listingService.uploadImages(validFiles);
             if (request.getImageUrls() == null) {
                 request.setImageUrls(new ArrayList<>());
             }
             request.getImageUrls().addAll(newImageUrls);
-
-            // Set main image if not provided
-            if ((request.getMainImageUrl() == null || request.getMainImageUrl().isBlank()) 
-                    && !newImageUrls.isEmpty()) {
+            if (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank()) {
                 request.setMainImageUrl(newImageUrls.get(0));
             }
         }
@@ -97,7 +98,7 @@ public class ListingController {
     public ResponseEntity<String> deleteListing(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorization) {
-        
+
         String userId = jwtUtil.extractUserId(authorization);
         String message = listingService.deleteListing(id, userId);
         return ResponseEntity.ok(message);
@@ -107,7 +108,7 @@ public class ListingController {
     public ResponseEntity<List<MyListingResponse>> getMyListings(
             @RequestHeader("Authorization") String authorization,
             @RequestParam(required = false) ListingStatus status) {
-        
+
         String ownerId = jwtUtil.extractUserId(authorization);
         List<MyListingResponse> listings = listingService.getMyListings(ownerId, status);
         return ResponseEntity.ok(listings);
@@ -118,7 +119,7 @@ public class ListingController {
     public ResponseEntity<AdPromotionResponse> promoteListing(
             @Valid @RequestBody AdPromotionRequest request,
             @RequestHeader("Authorization") String authorization) {
-        
+
         String userId = jwtUtil.extractUserId(authorization);
         AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization);
         return ResponseEntity.ok(response);
@@ -129,7 +130,7 @@ public class ListingController {
             @PathVariable String id,
             @RequestParam int days,
             @RequestHeader("Authorization") String authorization) {
-        
+
         String userId = jwtUtil.extractUserId(authorization);
         AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization);
         return ResponseEntity.ok(response);
@@ -163,7 +164,7 @@ public class ListingController {
             @RequestParam(required = false) Double minPrice,
             @RequestParam(required = false) Double maxPrice,
             @RequestParam(required = false) String city) {
-        
+
         List<?> results = listingService.searchListings(query, category, minPrice, maxPrice, city);
         return ResponseEntity.ok(results);
     }

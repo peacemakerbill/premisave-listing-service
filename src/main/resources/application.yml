@@ -7,6 +7,10 @@ spring:
   redis:
     host: localhost
     port: 6379
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 50MB
 
 server:
   port: 8082
@@ -41,12 +45,12 @@ mpesa:
   daraja:
     consumer-key: ${MPESA_CONSUMER_KEY:your_consumer_key_here}
     consumer-secret: ${MPESA_CONSUMER_SECRET:your_consumer_secret_here}
-    shortcode: ${MPESA_SHORTCODE:174379}           # Your Paybill
+    shortcode: ${MPESA_SHORTCODE:174379}
     passkey: ${MPESA_PASSKEY:your_passkey_here}
     callback-url: ${MPESA_CALLBACK_URL:http://localhost:8082/api/payments/mpesa/callback}
     confirmation-url: ${MPESA_CONFIRMATION_URL:http://localhost:8082/api/payments/mpesa/confirmation}
     validation-url: ${MPESA_VALIDATION_URL:http://localhost:8082/api/payments/mpesa/validation}
-    environment: sandbox                              # Change to "production" for live
+    environment: sandbox
 
 frontend:
   url: http://localhost:3000

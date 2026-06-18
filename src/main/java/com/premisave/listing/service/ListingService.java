@@ -3,6 +3,7 @@ package com.premisave.listing.service;
 import com.cloudinary.Cloudinary;
 import com.premisave.listing.client.AuthServiceClient;
 import com.premisave.listing.dto.ListingRequest;
+import com.premisave.listing.dto.ListingUpdateRequest;
 import com.premisave.listing.dto.ListingResponse;
 import com.premisave.listing.dto.MyListingResponse;
 import com.premisave.listing.dto.auth_service.UserSummaryResponse;
@@ -41,6 +42,8 @@ public class ListingService {
 
     @Value("${ad.promotion.daily-rate:2.99}")
     private BigDecimal dailyRate;
+
+    // ====================== CREATE ======================
 
     @Transactional
     public ListingResponse createListing(ListingRequest request, String authorizationHeader) {
@@ -139,6 +142,49 @@ public class ListingService {
         return lease;
     }
 
+    // ====================== UPDATE ======================
+
+    @Transactional
+    public ListingResponse updateListing(String id, ListingUpdateRequest request, String userId) {
+        try {
+            Listing existing = (Listing) getListingById(id);
+            if (!existing.getOwnerId().equals(userId)) {
+                throw new RuntimeException("You can only update your own listings");
+            }
+
+            // Only update fields that are provided
+            if (request.getTitle() != null) existing.setTitle(request.getTitle());
+            if (request.getDescription() != null) existing.setDescription(request.getDescription());
+            if (request.getPrice() != null) existing.setPrice(request.getPrice());
+            if (request.getLatitude() != null) existing.setLatitude(request.getLatitude());
+            if (request.getLongitude() != null) existing.setLongitude(request.getLongitude());
+            if (request.getAddress() != null) existing.setAddress(request.getAddress());
+            if (request.getCity() != null) existing.setCity(request.getCity());
+            if (request.getCountry() != null) existing.setCountry(request.getCountry());
+            if (request.getCategory() != null) existing.setCategory(request.getCategory());
+
+            if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
+                existing.setMainImageUrl(request.getMainImageUrl());
+            }
+
+            if (request.getImageUrls() != null) {
+                existing.setImageUrls(request.getImageUrls());
+            }
+
+            updateSpecificFields(existing, request);
+            Listing saved = saveListing(existing);
+
+            log.info("Listing updated: {} by user {}", saved.getId(), userId);
+
+            return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
+        } catch (Exception e) {
+            log.error("Error updating listing {}", id, e);
+            throw new RuntimeException("Failed to update listing: " + e.getMessage(), e);
+        }
+    }
+
+    // ====================== SAVE ======================
+
     public Listing saveListing(Listing listing) {
         return switch (listing) {
             case ShortTermRental st -> shortTermRentalRepository.save(st);
@@ -149,6 +195,8 @@ public class ListingService {
             default -> throw new IllegalArgumentException("Unknown listing type: " + listing.getClass().getSimpleName());
         };
     }
+
+    // ====================== IMAGE UPLOAD ======================
 
     public String uploadImage(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
@@ -186,6 +234,8 @@ public class ListingService {
                 .toList();
     }
 
+    // ====================== GET ======================
+
     public Object getListingById(String id) {
         return shortTermRentalRepository.findById(id)
                 .map(l -> (Object) l)
@@ -196,42 +246,7 @@ public class ListingService {
                 .orElseThrow(() -> new RuntimeException("Listing not found with id: " + id));
     }
 
-    @Transactional
-    public ListingResponse updateListing(String id, ListingRequest request, String userId) {
-        try {
-            Listing existing = (Listing) getListingById(id);
-            if (!existing.getOwnerId().equals(userId)) {
-                throw new RuntimeException("You can only update your own listings");
-            }
-
-            existing.setTitle(request.getTitle());
-            existing.setDescription(request.getDescription());
-            existing.setPrice(request.getPrice());
-            existing.setLatitude(request.getLatitude());
-            existing.setLongitude(request.getLongitude());
-            existing.setAddress(request.getAddress());
-            existing.setCity(request.getCity());
-            existing.setCountry(request.getCountry());
-
-            if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
-                existing.setMainImageUrl(request.getMainImageUrl());
-            }
-
-            if (request.getImageUrls() != null) {
-                existing.setImageUrls(request.getImageUrls());
-            }
-
-            updateSpecificFields(existing, request);
-            Listing saved = saveListing(existing);
-
-            log.info("Listing updated: {} by user {}", saved.getId(), userId);
-
-            return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
-        } catch (Exception e) {
-            log.error("Error updating listing {}", id, e);
-            throw new RuntimeException("Failed to update listing: " + e.getMessage(), e);
-        }
-    }
+    // ====================== UPDATE SPECIFIC FIELDS ======================
 
     private void updateSpecificFields(Listing listing, ListingRequest request) {
         if (listing instanceof ShortTermRental st) updateShortTermRental(st, request);
@@ -278,6 +293,8 @@ public class ListingService {
         if (r.getRenewable() != null) lease.setRenewable(r.getRenewable());
     }
 
+    // ====================== DELETE ======================
+
     @Transactional
     public String deleteListing(String id, String userId) {
         Listing listing = (Listing) getListingById(id);
@@ -289,6 +306,8 @@ public class ListingService {
         saveListing(listing);
         return "Listing has been archived successfully";
     }
+
+    // ====================== DISCOVERY ======================
 
     public List<ShortTermRental> getShortTermRentals(String city) {
         if (city == null || city.trim().isEmpty()) {
@@ -372,9 +391,11 @@ public class ListingService {
         if (listing.getStatus() == ListingStatus.REJECTED) return false;
         if (listing.getStatus() == ListingStatus.ACTIVE) return true;
 
-        return listing.isPromoted() && listing.getPromotionEndDate() != null 
+        return listing.isPromoted() && listing.getPromotionEndDate() != null
                 && listing.getPromotionEndDate().isAfter(LocalDateTime.now());
     }
+
+    // ====================== MY LISTINGS ======================
 
     public List<MyListingResponse> getMyListings(String ownerId, ListingStatus statusFilter) {
         if (ownerId == null || ownerId.trim().isEmpty()) {
