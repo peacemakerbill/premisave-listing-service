@@ -27,6 +27,15 @@ public class JwtService {
         return extractClaim(token, claims -> claims.get("userId", String.class));
     }
 
+    /**
+     * Extracts the role from the JWT.
+     * The auth service stores role as a single String under the "roles" claim,
+     * e.g. "roles": "ADMIN"
+     */
+    public String extractRole(String token) {
+        return extractClaim(token, claims -> claims.get("roles", String.class));
+    }
+
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         try {
             final Claims claims = extractAllClaims(token);
@@ -53,7 +62,7 @@ public class JwtService {
     private Key getSignInKey() {
         try {
             byte[] keyBytes = Decoders.BASE64.decode(secret);
-            
+
             if (keyBytes.length < 32) {
                 byte[] padded = new byte[32];
                 System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
