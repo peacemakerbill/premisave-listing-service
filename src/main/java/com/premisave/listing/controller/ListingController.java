@@ -2,6 +2,7 @@ package com.premisave.listing.controller;
 
 import com.premisave.listing.dto.AdPromotionRequest;
 import com.premisave.listing.dto.AdPromotionResponse;
+import com.premisave.listing.dto.ListingCategoryRequest;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingUpdateRequest;
 import com.premisave.listing.dto.ListingResponse;
@@ -168,6 +169,17 @@ public class ListingController {
     public ResponseEntity<List<ShortTermRental>> getShortTermRentals(
             @RequestParam(required = false) String city) {
         return ResponseEntity.ok(listingService.getShortTermRentals(city));
+    }
+
+    @PostMapping("/category")   // Accepts JSON body
+    public ResponseEntity<List<?>> getListingsByCategory(
+            @Valid @RequestBody ListingCategoryRequest request) {
+        
+        List<?> results = listingService.getListingsByCategory(
+                request.getCategory(), 
+                request.getCity()
+        );
+        return ResponseEntity.ok(results);
     }
 
     @GetMapping("/owner/{ownerId}")
