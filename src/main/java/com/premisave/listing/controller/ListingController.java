@@ -10,6 +10,7 @@ import com.premisave.listing.dto.MyListingResponse;
 import com.premisave.listing.entity.ShortTermRental;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
+import com.premisave.listing.enums.PaymentMethod;
 import com.premisave.listing.service.AdPromotionService;
 import com.premisave.listing.service.ListingService;
 import com.premisave.listing.util.JwtUtil;
@@ -35,11 +36,6 @@ public class ListingController {
 
     // ====================== CREATE LISTING ======================
 
-    /**
-     * Only HOME_OWNER accounts may create listings.
-     * CLIENT, SUPPORT, OPERATIONS, FINANCE, and ADMIN are all blocked here —
-     * admins manage listings through /admin/listings instead.
-     */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<ListingResponse> createListing(
@@ -69,10 +65,6 @@ public class ListingController {
 
     // ====================== UPDATE LISTING ======================
 
-    /**
-     * Only the HOME_OWNER who created the listing may update it.
-     * The ownership check (ownerId == userId) is enforced inside ListingService.
-     */
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<ListingResponse> updateListing(
@@ -106,8 +98,7 @@ public class ListingController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Object> getListingById(@PathVariable String id) {
-        Object listing = listingService.getListingById(id);
-        return ResponseEntity.ok(listing);
+        return ResponseEntity.ok(listingService.getListingById(id));
     }
 
     @DeleteMapping("/{id}")
@@ -117,8 +108,7 @@ public class ListingController {
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        String message = listingService.deleteListing(id, userId);
-        return ResponseEntity.ok(message);
+        return ResponseEntity.ok(listingService.deleteListing(id, userId));
     }
 
     @PostMapping("/{id}/archive")
@@ -128,8 +118,7 @@ public class ListingController {
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        String message = listingService.archiveListing(id, userId);
-        return ResponseEntity.ok(message);
+        return ResponseEntity.ok(listingService.archiveListing(id, userId));
     }
 
     @PostMapping("/{id}/unarchive")
@@ -139,8 +128,7 @@ public class ListingController {
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        String message = listingService.unarchiveListing(id, userId);
-        return ResponseEntity.ok(message);
+        return ResponseEntity.ok(listingService.unarchiveListing(id, userId));
     }
 
     @GetMapping("/me")
@@ -150,32 +138,53 @@ public class ListingController {
             @RequestParam(required = false) ListingStatus status) {
 
         String ownerId = jwtUtil.extractUserId(authorization);
-        List<MyListingResponse> listings = listingService.getMyListings(ownerId, status);
-        return ResponseEntity.ok(listings);
+        return ResponseEntity.ok(listingService.getMyListings(ownerId, status));
     }
 
     // ====================== PROMOTION ======================
 
+    /**
+     * Promote a listing.
+     *
+     * POST /listings/promote?method=MPESA
+     *
+     * A listing cannot be promoted if it already has an active promotion.
+     * Use /listings/{id}/extend to add more days to an existing promotion.
+     *
+     * @param method payment method (defaults to MPESA)
+     */
     @PostMapping("/promote")
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<AdPromotionResponse> promoteListing(
             @Valid @RequestBody AdPromotionRequest request,
+            @RequestParam(defaultValue = "MPESA") PaymentMethod method,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization);
+        AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization, method);
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Extend an existing promotion.
+     *
+     * POST /listings/{id}/extend?days=7&method=MPESA
+     *
+     * Can be called even while the promotion is still active —
+     * days are added on top of the current end date.
+     *
+     * @param method payment method (defaults to MPESA)
+     */
     @PostMapping("/{id}/extend")
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<AdPromotionResponse> extendPromotion(
             @PathVariable String id,
             @RequestParam int days,
+            @RequestParam(defaultValue = "MPESA") PaymentMethod method,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization);
+        AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization, method);
         return ResponseEntity.ok(response);
     }
 
@@ -187,7 +196,7 @@ public class ListingController {
         return ResponseEntity.ok(adPromotionService.getUserPromotions(userId));
     }
 
-    // ====================== DISCOVERY (open to all authenticated users) ======================
+    // ====================== DISCOVERY ======================
 
     @GetMapping("/short-term")
     public ResponseEntity<List<ShortTermRental>> getShortTermRentals(
@@ -198,12 +207,8 @@ public class ListingController {
     @PostMapping("/category")
     public ResponseEntity<List<?>> getListingsByCategory(
             @Valid @RequestBody ListingCategoryRequest request) {
-
-        List<?> results = listingService.getListingsByCategory(
-                request.getCategory(),
-                request.getCity()
-        );
-        return ResponseEntity.ok(results);
+        return ResponseEntity.ok(listingService.getListingsByCategory(
+                request.getCategory(), request.getCity()));
     }
 
     @GetMapping("/owner/{ownerId}")
@@ -220,18 +225,14 @@ public class ListingController {
             @RequestParam(required = false) Double minPrice,
             @RequestParam(required = false) Double maxPrice,
             @RequestParam(required = false) String city) {
-
-        List<?> results = listingService.searchListings(query, category, minPrice, maxPrice, city);
-        return ResponseEntity.ok(results);
+        return ResponseEntity.ok(listingService.searchListings(query, category, minPrice, maxPrice, city));
     }
 
-    // Legacy image upload endpoint
     @PostMapping("/upload-images")
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<List<String>> uploadImages(
             @RequestParam("files") List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
-        List<String> imageUrls = listingService.uploadImages(files);
-        return ResponseEntity.ok(imageUrls);
+        return ResponseEntity.ok(listingService.uploadImages(files));
     }
 }

@@ -8,6 +8,9 @@ import com.premisave.listing.repository.PaymentReceiptRepository;
 import com.premisave.listing.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,66 +27,202 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final PaymentReceiptRepository paymentReceiptRepository;
 
+    /**
+     * AdPromotionService is injected lazily to break the circular dependency:
+     * PaymentService → AdPromotionService → PaymentService
+     */
+    @Lazy
+    @Autowired
+    private AdPromotionService adPromotionService;
+
+    @Value("${app.receipt.base-url:https://premisave.com/receipts/}")
+    private String receiptBaseUrl;
+
+    // ====================== PROCESS PAYMENT ======================
+
+    /**
+     * Initiates a payment record.
+     *
+     * - MPESA: sets status PENDING; actual confirmation comes via callback.
+     * - Other methods (CARD, PAYPAL): sets COMPLETED immediately.
+     *   NOTE: In production, non-M-Pesa methods must call their respective
+     *   gateway SDK here and only set COMPLETED on a successful gateway response.
+     *
+     * @param userId         the paying user
+     * @param subscriptionId optional — null when paying for a promotion
+     * @param amount         amount to charge
+     * @param method         payment method chosen by the user
+     * @return the persisted Payment entity
+     */
     @Transactional
-    public Payment processPayment(String userId, String subscriptionId, BigDecimal amount, PaymentMethod method) {
+    public Payment processPayment(String userId,
+                                  String subscriptionId,
+                                  BigDecimal amount,
+                                  PaymentMethod method) {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId must not be null or blank.");
+        }
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Payment amount must be positive.");
+        }
+        if (method == null) {
+            throw new IllegalArgumentException("Payment method must be specified.");
+        }
+
         Payment payment = new Payment();
         payment.setUserId(userId);
         payment.setSubscriptionId(subscriptionId);
         payment.setAmount(amount);
         payment.setMethod(method);
-        payment.setStatus(method == PaymentMethod.MPESA ? PaymentStatus.PENDING : PaymentStatus.COMPLETED);
-        payment.setPaidAt(method == PaymentMethod.MPESA ? null : LocalDateTime.now());
         payment.setTransactionRef("TXN-" + System.currentTimeMillis());
 
-        Payment savedPayment = paymentRepository.save(payment);
-        if (method != PaymentMethod.MPESA) {
-            createPaymentReceipt(savedPayment);
+        if (method == PaymentMethod.MPESA) {
+            // M-Pesa is async — stay PENDING until callback arrives
+            payment.setStatus(PaymentStatus.PENDING);
+            payment.setPaidAt(null);
+        } else {
+            // Synchronous methods — mark completed immediately
+            // TODO: Replace with actual gateway integration (Stripe, PayPal SDK, etc.)
+            payment.setStatus(PaymentStatus.COMPLETED);
+            payment.setPaidAt(LocalDateTime.now());
         }
 
-        log.info("Payment initiated via {} for user: {}, amount: {}", method, userId, amount);
-        return savedPayment;
+        Payment saved = paymentRepository.save(payment);
+
+        if (saved.getStatus() == PaymentStatus.COMPLETED) {
+            createPaymentReceipt(saved);
+        }
+
+        log.info("Payment initiated: id={}, method={}, amount={}, status={}, user={}",
+                saved.getId(), method, amount, saved.getStatus(), userId);
+        return saved;
     }
 
+    // ====================== M-PESA CALLBACK ======================
+
+    /**
+     * Handles the STK Push callback from Safaricom Daraja.
+     *
+     * The callback structure from Safaricom is:
+     * {
+     *   "Body": {
+     *     "stkCallback": {
+     *       "MerchantRequestID": "...",
+     *       "CheckoutRequestID": "...",   ← this is what we store as transactionRef
+     *       "ResultCode": 0,              ← 0 = success
+     *       "ResultDesc": "The service request is processed successfully."
+     *     }
+     *   }
+     * }
+     *
+     * We match on CheckoutRequestID which must have been stored in transactionRef
+     * when the STK push was initiated.
+     */
     @Transactional
     public void handleMpesaCallback(Map<String, Object> callbackPayload) {
         try {
-            Map<String, Object> body = (Map<String, Object>) callbackPayload.get("Body");
-            Map<String, Object> stkCallback = (Map<String, Object>) body.get("stkCallback");
+            if (callbackPayload == null) {
+                log.warn("M-Pesa callback received with null payload — ignoring.");
+                return;
+            }
 
-            String resultCode = String.valueOf(stkCallback.get("ResultCode"));
+            Object bodyObj = callbackPayload.get("Body");
+            if (!(bodyObj instanceof Map)) {
+                log.warn("M-Pesa callback: 'Body' is missing or not a map — payload: {}", callbackPayload);
+                return;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = (Map<String, Object>) bodyObj;
+
+            Object stkObj = body.get("stkCallback");
+            if (!(stkObj instanceof Map)) {
+                log.warn("M-Pesa callback: 'stkCallback' is missing or not a map.");
+                return;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> stkCallback = (Map<String, Object>) stkObj;
+
+            Object resultCodeObj = stkCallback.get("ResultCode");
             String checkoutRequestId = (String) stkCallback.get("CheckoutRequestID");
-            String resultDesc = (String) stkCallback.get("ResultDesc");
+            String resultDesc       = (String) stkCallback.get("ResultDesc");
 
-            PaymentStatus status = "0".equals(resultCode) ? PaymentStatus.COMPLETED : PaymentStatus.FAILED;
+            if (checkoutRequestId == null || checkoutRequestId.isBlank()) {
+                log.warn("M-Pesa callback: CheckoutRequestID is missing — cannot match payment.");
+                return;
+            }
+
+            // ResultCode 0 = success; anything else = failure
+            boolean isSuccess = "0".equals(String.valueOf(resultCodeObj));
+            PaymentStatus status = isSuccess ? PaymentStatus.COMPLETED : PaymentStatus.FAILED;
 
             List<Payment> payments = paymentRepository.findByTransactionRef(checkoutRequestId);
-            
-            if (!payments.isEmpty()) {
-                Payment payment = payments.get(0);
-                payment.setStatus(status);
-                payment.setPaidAt(LocalDateTime.now());
-                paymentRepository.save(payment);
-
-                if (status == PaymentStatus.COMPLETED) {
-                    createPaymentReceipt(payment);
-                    log.info("M-Pesa payment successful for transaction: {}", checkoutRequestId);
-                } else {
-                    log.warn("M-Pesa payment failed: {} - {}", checkoutRequestId, resultDesc);
-                }
+            if (payments.isEmpty()) {
+                log.warn("M-Pesa callback: no payment found for CheckoutRequestID={}", checkoutRequestId);
+                return;
             }
+
+            Payment payment = payments.get(0);
+
+            // Idempotency guard — don't reprocess an already-confirmed payment
+            if (payment.getStatus() == PaymentStatus.COMPLETED) {
+                log.info("M-Pesa callback: payment {} already COMPLETED — skipping.", payment.getId());
+                return;
+            }
+
+            payment.setStatus(status);
+            payment.setPaidAt(LocalDateTime.now());
+            paymentRepository.save(payment);
+
+            if (isSuccess) {
+                createPaymentReceipt(payment);
+                log.info("M-Pesa payment CONFIRMED: paymentId={}, ref={}", payment.getId(), checkoutRequestId);
+
+                // Trigger downstream activation (promotion or subscription)
+                notifyPaymentConfirmed(payment);
+            } else {
+                log.warn("M-Pesa payment FAILED: ref={}, reason={}", checkoutRequestId, resultDesc);
+            }
+
         } catch (Exception e) {
-            log.error("Error processing M-Pesa callback: {}", e.getMessage(), e);
+            log.error("Unexpected error processing M-Pesa callback: {}", e.getMessage(), e);
+            // Do NOT rethrow — Safaricom expects a 200 OK even on our internal errors
         }
     }
+
+    /**
+     * After M-Pesa confirms a payment, activate whatever service the payment was for.
+     * Currently handles promotion activation; extend here for subscriptions.
+     */
+    private void notifyPaymentConfirmed(Payment payment) {
+        try {
+            adPromotionService.activatePromotionAfterMpesaPayment(payment.getId());
+        } catch (Exception e) {
+            log.error("Failed to activate promotion after payment {}: {}", payment.getId(), e.getMessage(), e);
+        }
+
+        // If subscriptionId is set, the subscription was also waiting on this payment
+        if (payment.getSubscriptionId() != null) {
+            log.info("Payment {} linked to subscriptionId {} confirmed — subscription is now active.",
+                    payment.getId(), payment.getSubscriptionId());
+            // SubscriptionService doesn't need a callback because it's created synchronously
+            // for non-M-Pesa. For M-Pesa subscriptions, add activation logic here.
+        }
+    }
+
+    // ====================== RECEIPT ======================
 
     private void createPaymentReceipt(Payment payment) {
         PaymentReceipt receipt = new PaymentReceipt();
         receipt.setPaymentId(payment.getId());
         receipt.setUserId(payment.getUserId());
-        receipt.setReceiptNumber("RCPT-" + System.currentTimeMillis());
-        receipt.setReceiptUrl("https://premisave.com/receipts/" + receipt.getReceiptNumber());
+        String receiptNumber = "RCPT-" + System.currentTimeMillis();
+        receipt.setReceiptNumber(receiptNumber);
+        receipt.setReceiptUrl(receiptBaseUrl + receiptNumber);
         paymentReceiptRepository.save(receipt);
+        log.info("Receipt created: {} for payment {}", receiptNumber, payment.getId());
     }
+
+    // ====================== QUERIES ======================
 
     public List<Payment> getUserPayments(String userId) {
         return paymentRepository.findByUserId(userId);
