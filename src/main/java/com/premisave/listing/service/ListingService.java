@@ -11,6 +11,7 @@ import com.premisave.listing.entity.*;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.repository.*;
+import com.premisave.listing.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +40,7 @@ public class ListingService {
     private final LeaseRepository leaseRepository;
     private final AuthServiceClient authServiceClient;
     private final Cloudinary cloudinary;
+    private final JwtService jwtService; // for role extraction
 
     @Value("${ad.promotion.daily-rate:2.99}")
     private BigDecimal dailyRate;
@@ -52,6 +54,21 @@ public class ListingService {
             if (user == null || user.getId() == null) {
                 throw new RuntimeException("User authentication failed. Please login again.");
             }
+
+            // ====================== ROLE CHECK ======================
+            // Extract the raw token (strip "Bearer " prefix if present)
+            String token = authorizationHeader;
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
+            }
+            String role = jwtService.extractRole(token);
+            if (!"HOME_OWNER".equals(role)) {
+                throw new RuntimeException(
+                    "Access denied: only HOME_OWNER accounts can create listings. " +
+                    "Your current role is: " + (role != null ? role : "unknown")
+                );
+            }
+            // ========================================================
 
             if (request.getImageUrls() == null) {
                 request.setImageUrls(new ArrayList<>());
@@ -71,13 +88,17 @@ public class ListingService {
             listing.setCountry(request.getCountry() != null ? request.getCountry() : "Kenya");
             listing.setMainImageUrl(request.getMainImageUrl());
             listing.setImageUrls(request.getImageUrls());
-            listing.setStatus(ListingStatus.ACTIVE);
+
+            // Listings start as PENDING and inactive — they only become visible
+            // once the owner promotes them and the payment is confirmed.
+            listing.setStatus(ListingStatus.PENDING);
+            listing.setActive(false);
 
             listing = saveListing(listing);
 
-            log.info("New listing created successfully: ID={} by user={}", listing.getId(), user.getId());
+            log.info("New listing created (PENDING) by HOME_OWNER={}: listingId={}", user.getId(), listing.getId());
 
-            return new ListingResponse("Listing created successfully", listing.getId(), listing.getTitle(), true);
+            return new ListingResponse("Listing created successfully. Promote it to make it visible to customers.", listing.getId(), listing.getTitle(), true);
 
         } catch (Exception e) {
             log.error("Error while creating listing", e);
@@ -88,10 +109,10 @@ public class ListingService {
     private Listing createSpecificListing(ListingRequest request) {
         return switch (request.getCategory()) {
             case SHORT_TERM_RENTAL -> createShortTermRental(request);
-            case LONG_TERM_RENTAL -> createLongTermRental(request);
-            case LAND_SALE -> createLandSale(request);
-            case HOUSE_SALE -> createHouseSale(request);
-            case LEASE -> createLease(request);
+            case LONG_TERM_RENTAL  -> createLongTermRental(request);
+            case LAND_SALE         -> createLandSale(request);
+            case HOUSE_SALE        -> createHouseSale(request);
+            case LEASE             -> createLease(request);
         };
     }
 
@@ -152,7 +173,6 @@ public class ListingService {
                 throw new RuntimeException("You can only update your own listings");
             }
 
-            // Only update fields that are provided
             if (request.getTitle() != null) existing.setTitle(request.getTitle());
             if (request.getDescription() != null) existing.setDescription(request.getDescription());
             if (request.getPrice() != null) existing.setPrice(request.getPrice());
@@ -188,10 +208,10 @@ public class ListingService {
     public Listing saveListing(Listing listing) {
         return switch (listing) {
             case ShortTermRental st -> shortTermRentalRepository.save(st);
-            case LongTermRental lt -> longTermRentalRepository.save(lt);
-            case LandSale ls -> landSaleRepository.save(ls);
-            case HouseSale hs -> houseSaleRepository.save(hs);
-            case Lease l -> leaseRepository.save(l);
+            case LongTermRental  lt -> longTermRentalRepository.save(lt);
+            case LandSale        ls -> landSaleRepository.save(ls);
+            case HouseSale       hs -> houseSaleRepository.save(hs);
+            case Lease           l  -> leaseRepository.save(l);
             default -> throw new IllegalArgumentException("Unknown listing type: " + listing.getClass().getSimpleName());
         };
     }
@@ -351,9 +371,17 @@ public class ListingService {
 
     public List<ShortTermRental> getShortTermRentals(String city) {
         if (city == null || city.trim().isEmpty()) {
-            return shortTermRentalRepository.findAll();
+            return shortTermRentalRepository.findAll().stream()
+                    .filter(l -> l.isPromoted()
+                            && l.getPromotionEndDate() != null
+                            && l.getPromotionEndDate().isAfter(LocalDateTime.now()))
+                    .toList();
         }
-        return shortTermRentalRepository.findByCityAndActiveTrue(city);
+        return shortTermRentalRepository.findByCityAndActiveTrue(city).stream()
+                .filter(l -> l.isPromoted()
+                        && l.getPromotionEndDate() != null
+                        && l.getPromotionEndDate().isAfter(LocalDateTime.now()))
+                .toList();
     }
 
     public List<?> getListingsByOwner(String ownerId, ListingCategory category) {
@@ -373,10 +401,10 @@ public class ListingService {
 
         return switch (category) {
             case SHORT_TERM_RENTAL -> shortTermRentalRepository.findByOwnerId(ownerId);
-            case LONG_TERM_RENTAL -> longTermRentalRepository.findByOwnerId(ownerId);
-            case LAND_SALE -> landSaleRepository.findByOwnerId(ownerId);
-            case HOUSE_SALE -> houseSaleRepository.findByOwnerId(ownerId);
-            case LEASE -> leaseRepository.findByOwnerId(ownerId);
+            case LONG_TERM_RENTAL  -> longTermRentalRepository.findByOwnerId(ownerId);
+            case LAND_SALE         -> landSaleRepository.findByOwnerId(ownerId);
+            case HOUSE_SALE        -> houseSaleRepository.findByOwnerId(ownerId);
+            case LEASE             -> leaseRepository.findByOwnerId(ownerId);
         };
     }
 
@@ -392,9 +420,9 @@ public class ListingService {
                 }
             }
             case LONG_TERM_RENTAL -> new ArrayList<>(longTermRentalRepository.findAll());
-            case LAND_SALE -> new ArrayList<>(landSaleRepository.findAll());
-            case HOUSE_SALE -> new ArrayList<>(houseSaleRepository.findAll());
-            case LEASE -> new ArrayList<>(leaseRepository.findAll());
+            case LAND_SALE        -> new ArrayList<>(landSaleRepository.findAll());
+            case HOUSE_SALE       -> new ArrayList<>(houseSaleRepository.findAll());
+            case LEASE            -> new ArrayList<>(leaseRepository.findAll());
         };
 
         return all.stream()
@@ -420,19 +448,37 @@ public class ListingService {
 
         for (Object obj : candidates) {
             if (obj instanceof Listing listing && isListingVisible(listing)) {
+                // Apply text filter
+                if (query != null && !query.isBlank()) {
+                    String q = query.toLowerCase();
+                    boolean titleMatch = listing.getTitle() != null && listing.getTitle().toLowerCase().contains(q);
+                    boolean descMatch  = listing.getDescription() != null && listing.getDescription().toLowerCase().contains(q);
+                    if (!titleMatch && !descMatch) continue;
+                }
+                // Apply price filters
+                if (minPrice != null && listing.getPrice().compareTo(BigDecimal.valueOf(minPrice)) < 0) continue;
+                if (maxPrice != null && listing.getPrice().compareTo(BigDecimal.valueOf(maxPrice)) > 0) continue;
+                // Apply city filter (only when not already filtered at query level)
+                if (city != null && !city.isBlank()) {
+                    if (listing.getCity() == null || !listing.getCity().equalsIgnoreCase(city)) continue;
+                }
                 results.add(listing);
             }
         }
         return results;
     }
 
+    /**
+     * A listing is visible to the public only when it is promoted with an
+     * active (non-expired) promotion. Deleted, archived, or rejected listings
+     * are never shown regardless of promotion status.
+     */
     private boolean isListingVisible(Listing listing) {
         if (listing.isDeleted()) return false;
-        if (!listing.isActive() || listing.isArchived()) return false;
+        if (listing.isArchived()) return false;
         if (listing.getStatus() == ListingStatus.REJECTED) return false;
-        if (listing.getStatus() == ListingStatus.ACTIVE) return true;
-
-        return listing.isPromoted() && listing.getPromotionEndDate() != null
+        return listing.isPromoted()
+                && listing.getPromotionEndDate() != null
                 && listing.getPromotionEndDate().isAfter(LocalDateTime.now());
     }
 

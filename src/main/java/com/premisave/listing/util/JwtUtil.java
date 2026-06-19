@@ -23,4 +23,11 @@ public class JwtUtil {
         }
         return jwtService.extractUsername(token);
     }
+
+    public String extractRole(String token) {
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
+        return jwtService.extractRole(token);
+    }
 }

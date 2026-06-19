@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -33,7 +34,14 @@ public class ListingController {
     private final JwtUtil jwtUtil;
 
     // ====================== CREATE LISTING ======================
+
+    /**
+     * Only HOME_OWNER accounts may create listings.
+     * CLIENT, SUPPORT, OPERATIONS, FINANCE, and ADMIN are all blocked here —
+     * admins manage listings through /admin/listings instead.
+     */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<ListingResponse> createListing(
             @RequestPart("request") @Valid ListingRequest request,
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
@@ -60,7 +68,13 @@ public class ListingController {
     }
 
     // ====================== UPDATE LISTING ======================
+
+    /**
+     * Only the HOME_OWNER who created the listing may update it.
+     * The ownership check (ownerId == userId) is enforced inside ListingService.
+     */
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<ListingResponse> updateListing(
             @PathVariable String id,
             @RequestPart("request") @Valid ListingUpdateRequest request,
@@ -89,6 +103,7 @@ public class ListingController {
     }
 
     // ====================== OTHER ENDPOINTS ======================
+
     @GetMapping("/{id}")
     public ResponseEntity<Object> getListingById(@PathVariable String id) {
         Object listing = listingService.getListingById(id);
@@ -96,6 +111,7 @@ public class ListingController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<String> deleteListing(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorization) {
@@ -106,6 +122,7 @@ public class ListingController {
     }
 
     @PostMapping("/{id}/archive")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<String> archiveListing(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorization) {
@@ -116,6 +133,7 @@ public class ListingController {
     }
 
     @PostMapping("/{id}/unarchive")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<String> unarchiveListing(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorization) {
@@ -126,6 +144,7 @@ public class ListingController {
     }
 
     @GetMapping("/me")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<List<MyListingResponse>> getMyListings(
             @RequestHeader("Authorization") String authorization,
             @RequestParam(required = false) ListingStatus status) {
@@ -136,7 +155,9 @@ public class ListingController {
     }
 
     // ====================== PROMOTION ======================
+
     @PostMapping("/promote")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<AdPromotionResponse> promoteListing(
             @Valid @RequestBody AdPromotionRequest request,
             @RequestHeader("Authorization") String authorization) {
@@ -147,6 +168,7 @@ public class ListingController {
     }
 
     @PostMapping("/{id}/extend")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<AdPromotionResponse> extendPromotion(
             @PathVariable String id,
             @RequestParam int days,
@@ -158,25 +180,27 @@ public class ListingController {
     }
 
     @GetMapping("/promotions/my")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<List<com.premisave.listing.entity.ListingPromotion>> getMyPromotions(
             @RequestHeader("Authorization") String authorization) {
         String userId = jwtUtil.extractUserId(authorization);
         return ResponseEntity.ok(adPromotionService.getUserPromotions(userId));
     }
 
-    // ====================== DISCOVERY ======================
+    // ====================== DISCOVERY (open to all authenticated users) ======================
+
     @GetMapping("/short-term")
     public ResponseEntity<List<ShortTermRental>> getShortTermRentals(
             @RequestParam(required = false) String city) {
         return ResponseEntity.ok(listingService.getShortTermRentals(city));
     }
 
-    @PostMapping("/category")   // Accepts JSON body
+    @PostMapping("/category")
     public ResponseEntity<List<?>> getListingsByCategory(
             @Valid @RequestBody ListingCategoryRequest request) {
-        
+
         List<?> results = listingService.getListingsByCategory(
-                request.getCategory(), 
+                request.getCategory(),
                 request.getCity()
         );
         return ResponseEntity.ok(results);
@@ -203,6 +227,7 @@ public class ListingController {
 
     // Legacy image upload endpoint
     @PostMapping("/upload-images")
+    @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<List<String>> uploadImages(
             @RequestParam("files") List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {

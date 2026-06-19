@@ -69,9 +69,6 @@ public class AdminService {
         if (listing.getStatus() == ListingStatus.ACTIVE) {
             throw new RuntimeException("Listing is already approved and active");
         }
-        if (listing.getStatus() == ListingStatus.REJECTED) {
-            throw new RuntimeException("Listing has been rejected — reject it first before approving");
-        }
 
         listing.setStatus(ListingStatus.ACTIVE);
         listing.setActive(true);
