@@ -20,12 +20,7 @@ public class AdminListingController {
 
     /**
      * Get all listings with optional filters.
-     * ADMIN and FINANCE can view listings.
-     * Examples:
-     *   GET /admin/listings                          - all listings
-     *   GET /admin/listings?deleted=true             - soft-deleted only
-     *   GET /admin/listings?archived=true            - archived only
-     *   GET /admin/listings?status=PENDING           - pending approval
+     * ADMIN and FINANCE roles allowed.
      */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'FINANCE')")
@@ -38,7 +33,7 @@ public class AdminListingController {
 
     /**
      * Get a specific listing by ID.
-     * ADMIN and FINANCE can view.
+     * ADMIN and FINANCE roles allowed.
      */
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'FINANCE')")
@@ -49,8 +44,8 @@ public class AdminListingController {
     // ====================== APPROVE / REJECT ======================
 
     /**
-     * Approve a pending listing — makes it publicly visible.
-     * ADMIN only.
+     * Approve a pending listing.
+     * ADMIN role only.
      */
     @PutMapping("/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
@@ -59,8 +54,8 @@ public class AdminListingController {
     }
 
     /**
-     * Reject a listing — hides it from public view.
-     * ADMIN only.
+     * Reject a listing.
+     * ADMIN role only.
      */
     @PutMapping("/{id}/reject")
     @PreAuthorize("hasRole('ADMIN')")
@@ -71,8 +66,8 @@ public class AdminListingController {
     // ====================== ARCHIVE / UNARCHIVE ======================
 
     /**
-     * Archive a listing — owner-initiated or admin-forced.
-     * ADMIN only.
+     * Archive a listing.
+     * ADMIN role only.
      */
     @PutMapping("/{id}/archive")
     @PreAuthorize("hasRole('ADMIN')")
@@ -81,8 +76,8 @@ public class AdminListingController {
     }
 
     /**
-     * Unarchive a listing — restores it to its previous active state.
-     * ADMIN only.
+     * Unarchive a listing.
+     * ADMIN role only.
      */
     @PutMapping("/{id}/unarchive")
     @PreAuthorize("hasRole('ADMIN')")
@@ -93,8 +88,8 @@ public class AdminListingController {
     // ====================== DELETE / RESTORE ======================
 
     /**
-     * Soft delete a listing — invisible to users but stays in DB.
-     * ADMIN only.
+     * Soft delete a listing.
+     * ADMIN role only.
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
@@ -103,8 +98,8 @@ public class AdminListingController {
     }
 
     /**
-     * Restore a soft-deleted listing back to ACTIVE.
-     * ADMIN only.
+     * Restore a soft-deleted listing.
+     * ADMIN role only.
      */
     @PutMapping("/{id}/restore")
     @PreAuthorize("hasRole('ADMIN')")
@@ -113,8 +108,8 @@ public class AdminListingController {
     }
 
     /**
-     * Permanently delete a listing from the database.
-     * Irreversible. ADMIN only.
+     * Permanently delete a listing.
+     * ADMIN role only.
      */
     @DeleteMapping("/{id}/hard-delete")
     @PreAuthorize("hasRole('ADMIN')")
