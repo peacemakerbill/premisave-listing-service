@@ -37,8 +37,8 @@ rate-limit:
 # Ad Promotion
 ad:
   promotion:
-    daily-rate: 2.99
-    default-currency: USD
+    daily-rate: 299
+    default-currency: KES
 
 # ====================== M-PESA DARAJA CONFIG ======================
 mpesa:

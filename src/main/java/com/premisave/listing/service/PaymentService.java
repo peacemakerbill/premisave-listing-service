@@ -1,15 +1,12 @@
 package com.premisave.listing.service;
 
 import com.premisave.listing.entity.Payment;
-import com.premisave.listing.entity.PaymentReceipt;
 import com.premisave.listing.enums.PaymentMethod;
 import com.premisave.listing.enums.PaymentStatus;
-import com.premisave.listing.repository.PaymentReceiptRepository;
 import com.premisave.listing.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +22,6 @@ import java.util.Map;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
-    private final PaymentReceiptRepository paymentReceiptRepository;
 
     /**
      * AdPromotionService is injected lazily to break the circular dependency:
@@ -34,9 +30,6 @@ public class PaymentService {
     @Lazy
     @Autowired
     private AdPromotionService adPromotionService;
-
-    @Value("${app.receipt.base-url:https://premisave.com/receipts/}")
-    private String receiptBaseUrl;
 
     // ====================== PROCESS PAYMENT ======================
 
@@ -47,6 +40,9 @@ public class PaymentService {
      * - Other methods (CARD, PAYPAL): sets COMPLETED immediately.
      *   NOTE: In production, non-M-Pesa methods must call their respective
      *   gateway SDK here and only set COMPLETED on a successful gateway response.
+     *
+     * Receipts are NOT generated server-side. The frontend constructs receipts
+     * from the Payment response data (id, amount, status, method, paidAt, transactionRef).
      *
      * @param userId         the paying user
      * @param subscriptionId optional — null when paying for a promotion
@@ -88,10 +84,6 @@ public class PaymentService {
         }
 
         Payment saved = paymentRepository.save(payment);
-
-        if (saved.getStatus() == PaymentStatus.COMPLETED) {
-            createPaymentReceipt(saved);
-        }
 
         log.info("Payment initiated: id={}, method={}, amount={}, status={}, user={}",
                 saved.getId(), method, amount, saved.getStatus(), userId);
@@ -174,7 +166,6 @@ public class PaymentService {
             paymentRepository.save(payment);
 
             if (isSuccess) {
-                createPaymentReceipt(payment);
                 log.info("M-Pesa payment CONFIRMED: paymentId={}, ref={}", payment.getId(), checkoutRequestId);
 
                 // Trigger downstream activation (promotion or subscription)
@@ -207,19 +198,6 @@ public class PaymentService {
             // SubscriptionService doesn't need a callback because it's created synchronously
             // for non-M-Pesa. For M-Pesa subscriptions, add activation logic here.
         }
-    }
-
-    // ====================== RECEIPT ======================
-
-    private void createPaymentReceipt(Payment payment) {
-        PaymentReceipt receipt = new PaymentReceipt();
-        receipt.setPaymentId(payment.getId());
-        receipt.setUserId(payment.getUserId());
-        String receiptNumber = "RCPT-" + System.currentTimeMillis();
-        receipt.setReceiptNumber(receiptNumber);
-        receipt.setReceiptUrl(receiptBaseUrl + receiptNumber);
-        paymentReceiptRepository.save(receipt);
-        log.info("Receipt created: {} for payment {}", receiptNumber, payment.getId());
     }
 
     // ====================== QUERIES ======================

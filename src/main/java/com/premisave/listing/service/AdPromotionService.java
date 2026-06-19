@@ -7,9 +7,11 @@ import com.premisave.listing.dto.auth_service.UserSummaryResponse;
 import com.premisave.listing.entity.Listing;
 import com.premisave.listing.entity.ListingPromotion;
 import com.premisave.listing.entity.Payment;
+import com.premisave.listing.entity.Subscription;
 import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.enums.PaymentMethod;
 import com.premisave.listing.enums.PaymentStatus;
+import com.premisave.listing.enums.SubscriptionPlan;
 import com.premisave.listing.repository.ListingPromotionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,8 +21,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -31,8 +35,9 @@ public class AdPromotionService {
     private final PaymentService paymentService;
     private final ListingService listingService;
     private final AuthServiceClient authServiceClient;
+    private final SubscriptionService subscriptionService;
 
-    @Value("${ad.promotion.daily-rate:2.99}")
+    @Value("${ad.promotion.daily-rate:299}")
     private BigDecimal dailyRate;
 
     @Value("${ad.promotion.default-currency:KES}")
@@ -50,10 +55,13 @@ public class AdPromotionService {
      * 3. Payment is processed before the promotion record is written.
      *    If payment fails, no promotion is created (transactional rollback).
      * 4. After payment succeeds, the listing is set ACTIVE and visible.
+     * 5. Subscribers receive a discounted daily rate based on their plan tier.
+     *    customDailyRate from the request always overrides everything.
      *
-     * @param request   promotion request (listingId, days, optional custom rate)
-     * @param userId    authenticated user's ID (from JWT)
-     * @param authHeader full Authorization header for downstream auth service calls
+     * @param request       promotion request (listingId, days, optional custom rate)
+     * @param userId        authenticated user's ID (from JWT)
+     * @param authHeader    full Authorization header for downstream auth service calls
+     * @param paymentMethod chosen payment method
      * @return AdPromotionResponse with promotion details
      */
     @Transactional
@@ -87,18 +95,16 @@ public class AdPromotionService {
             );
         }
 
-        // 4. Calculate cost
+        // 4. Resolve effective daily rate:
+        //    customDailyRate > subscription discount > base rate
         int days = request.getDays();
-        BigDecimal rate = (request.getCustomDailyRate() != null
-                && request.getCustomDailyRate().compareTo(BigDecimal.ZERO) > 0)
-                ? request.getCustomDailyRate()
-                : dailyRate;
-        BigDecimal totalAmount = rate.multiply(BigDecimal.valueOf(days));
+        BigDecimal effectiveRate = resolveEffectiveRate(request.getCustomDailyRate(), userId);
+        BigDecimal totalAmount = effectiveRate.multiply(BigDecimal.valueOf(days));
 
         // 5. Process payment FIRST — if this throws, nothing else is persisted
         Payment payment = paymentService.processPayment(
                 userId,
-                null,           // not linked to a subscription
+                null,
                 totalAmount,
                 paymentMethod
         );
@@ -109,7 +115,7 @@ public class AdPromotionService {
         promotion.setListingId(listing.getId());
         promotion.setOwnerId(userId);
         promotion.setDays(days);
-        promotion.setDailyRate(rate);
+        promotion.setDailyRate(effectiveRate);
         promotion.setTotalAmount(totalAmount);
         promotion.setCurrency(defaultCurrency);
         promotion.setStartDate(now);
@@ -131,8 +137,8 @@ public class AdPromotionService {
             listingService.saveListing(listing);
         }
 
-        log.info("Listing {} promoted for {} days by user {}. Payment: {}, Expires: {}",
-                listing.getId(), days, userId, payment.getId(), savedPromotion.getEndDate());
+        log.info("Listing {} promoted for {} days by user {} at KES {}/day. Payment: {}, Expires: {}",
+                listing.getId(), days, userId, effectiveRate, payment.getId(), savedPromotion.getEndDate());
 
         return new AdPromotionResponse(
                 savedPromotion.getId(),
@@ -157,6 +163,7 @@ public class AdPromotionService {
      * 2. If promotion is still active, the new days are added to the existing end date.
      * 3. If promotion has expired, it restarts from now.
      * 4. Payment is processed before the listing is updated.
+     * 5. Subscribers receive the same plan-based discount as in promoteListing().
      */
     @Transactional
     public AdPromotionResponse extendPromotion(String listingId,
@@ -180,8 +187,9 @@ public class AdPromotionService {
             throw new RuntimeException("You can only extend promotion on your own listings.");
         }
 
-        // 3. Calculate cost
-        BigDecimal totalAmount = dailyRate.multiply(BigDecimal.valueOf(additionalDays));
+        // 3. Resolve effective daily rate (no customDailyRate on extend — use subscription/base)
+        BigDecimal effectiveRate = resolveEffectiveRate(null, userId);
+        BigDecimal totalAmount = effectiveRate.multiply(BigDecimal.valueOf(additionalDays));
 
         // 4. Process payment FIRST
         Payment payment = paymentService.processPayment(
@@ -208,7 +216,7 @@ public class AdPromotionService {
         extension.setListingId(listingId);
         extension.setOwnerId(userId);
         extension.setDays(additionalDays);
-        extension.setDailyRate(dailyRate);
+        extension.setDailyRate(effectiveRate);
         extension.setTotalAmount(totalAmount);
         extension.setCurrency(defaultCurrency);
         extension.setStartDate(now);
@@ -226,8 +234,8 @@ public class AdPromotionService {
             listingService.saveListing(listing);
         }
 
-        log.info("Promotion extended: listing={}, +{}days, newExpiry={}, user={}, payment={}",
-                listingId, additionalDays, newEndDate, userId, payment.getId());
+        log.info("Promotion extended: listing={}, +{}days, newExpiry={}, user={}, rate=KES{}, payment={}",
+                listingId, additionalDays, newEndDate, userId, effectiveRate, payment.getId());
 
         return new AdPromotionResponse(
                 extension.getId(),
@@ -286,7 +294,6 @@ public class AdPromotionService {
     public void deactivateExpiredPromotions() {
         log.info("Scheduled task: checking for expired promotions...");
 
-        // Efficient query — only fetch promotions that have ended
         List<ListingPromotion> expired = promotionRepository.findByEndDateBeforeAndPaymentStatus(
                 LocalDateTime.now(), PaymentStatus.COMPLETED);
 
@@ -295,7 +302,6 @@ public class AdPromotionService {
             try {
                 Listing listing = (Listing) listingService.getListingById(promo.getListingId());
                 if (listing != null && listing.isPromoted()) {
-                    // Check no newer promotion is active for the same listing
                     boolean hasNewerPromotion = promotionRepository
                             .findByListingIdAndEndDateAfterAndPaymentStatus(
                                     listing.getId(), LocalDateTime.now(), PaymentStatus.COMPLETED)
@@ -327,5 +333,60 @@ public class AdPromotionService {
 
     public List<ListingPromotion> getUserPromotions(String ownerId) {
         return promotionRepository.findByOwnerId(ownerId);
+    }
+
+    // ====================== PRIVATE HELPERS ======================
+
+    /**
+     * Resolves the effective daily rate for a promotion or extension.
+     *
+     * Priority:
+     * 1. customDailyRate from request (if positive) — always wins.
+     * 2. Subscription-discounted rate (silently fetched; no exception if missing).
+     * 3. Base daily rate from config.
+     *
+     * @param customDailyRate optional override from the request DTO
+     * @param userId          owner's user ID used to look up their active subscription
+     * @return the resolved rate, scaled to 2 decimal places
+     */
+    private BigDecimal resolveEffectiveRate(BigDecimal customDailyRate, String userId) {
+        if (customDailyRate != null && customDailyRate.compareTo(BigDecimal.ZERO) > 0) {
+            return customDailyRate;
+        }
+
+        // Silently attempt to fetch the active subscription — never throw to the caller
+        try {
+            Optional<Subscription> subscription = subscriptionService.getActiveSubscription(userId);
+            if (subscription.isPresent()) {
+                BigDecimal discounted = getDiscountedRate(subscription.get().getPlan());
+                log.info("Subscription discount applied for user {}: plan={}, rate=KES{}",
+                        userId, subscription.get().getPlan(), discounted);
+                return discounted;
+            }
+        } catch (Exception e) {
+            log.debug("No active subscription for user {} — using base rate. Reason: {}", userId, e.getMessage());
+        }
+
+        return dailyRate;
+    }
+
+    /**
+     * Returns the discounted daily promotion rate for each subscription plan tier.
+     *
+     * Discount tiers:
+     *   BASIC    → 10% off base rate
+     *   PREMIUM  → 20% off base rate
+     *   ULTIMATE → 35% off base rate
+     *
+     * @param plan the subscriber's active plan
+     * @return discounted rate, rounded to 2 decimal places (HALF_UP)
+     */
+    private BigDecimal getDiscountedRate(SubscriptionPlan plan) {
+        BigDecimal discountMultiplier = switch (plan) {
+            case BASIC    -> BigDecimal.valueOf(0.90); // 10% off
+            case PREMIUM  -> BigDecimal.valueOf(0.80); // 20% off
+            case ULTIMATE -> BigDecimal.valueOf(0.65); // 35% off
+        };
+        return dailyRate.multiply(discountMultiplier).setScale(2, RoundingMode.HALF_UP);
     }
 }

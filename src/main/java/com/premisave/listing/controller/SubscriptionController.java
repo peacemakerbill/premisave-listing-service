@@ -61,6 +61,8 @@ public class SubscriptionController {
      * Get the current active subscription, if any.
      *
      * GET /subscriptions/active
+     *
+     * Returns 200 with the subscription if active, or 204 No Content if none found.
      */
     @GetMapping("/active")
     @PreAuthorize("isAuthenticated()")
@@ -68,7 +70,9 @@ public class SubscriptionController {
             @RequestHeader("Authorization") String authorization) {
 
         String ownerId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(subscriptionService.getActiveSubscription(ownerId));
+        return subscriptionService.getActiveSubscription(ownerId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
     }
 
     /**

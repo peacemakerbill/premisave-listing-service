@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -67,7 +68,7 @@ public class SubscriptionService {
         sub.setStartDate(LocalDateTime.now());
         sub.setEndDate(LocalDateTime.now().plusMonths(plan.getMonths()));
         sub.setSubscriptionActive(true);
-        sub.setPaymentId(payment.getId()); // Link payment to subscription
+        sub.setPaymentId(payment.getId());
 
         Subscription saved = subscriptionRepository.save(sub);
         log.info("Subscription created: owner={}, plan={}, paymentId={}, expires={}",
@@ -84,16 +85,18 @@ public class SubscriptionService {
     }
 
     /**
-     * Returns the current active, non-expired subscription.
-     * Throws if none found.
+     * Returns the current active, non-expired subscription as an Optional.
+     *
+     * Returns Optional.empty() instead of throwing when no subscription exists,
+     * allowing callers (e.g. AdPromotionService) to handle the absence gracefully
+     * without try/catch noise.
+     *
+     * @param ownerId the user to look up
+     * @return Optional containing the active Subscription, or empty if none found
      */
-    public Subscription getActiveSubscription(String ownerId) {
+    public Optional<Subscription> getActiveSubscription(String ownerId) {
         return subscriptionRepository.findByOwnerIdAndSubscriptionActiveTrue(ownerId)
-                .filter(sub -> sub.getEndDate() != null && sub.getEndDate().isAfter(LocalDateTime.now()))
-                .orElseThrow(() -> new RuntimeException(
-                    "No active subscription found for user: " + ownerId +
-                    ". Please subscribe to a plan to create and manage listings."
-                ));
+                .filter(sub -> sub.getEndDate() != null && sub.getEndDate().isAfter(LocalDateTime.now()));
     }
 
     /**
