@@ -52,10 +52,11 @@ mpesa:
     validation-url: ${MPESA_VALIDATION_URL:http://localhost:8082/api/payments/mpesa/validation}
     environment: sandbox
 
-# ====================== FASTFOREX CURRENCY API ======================
-fastforex:
-  api-key: ${FASTFOREX_API_KEY:1a8c973ba2-25f74d5c04-tgwhlx}
-  base-url: https://api.fastforex.io
+# ====================== FRANKFURTER CURRENCY API ======================
+# Free, open-source, no API key required.
+# Override only if self-hosting Frankfurter.
+frankfurter:
+  base-url: ${FRANKFURTER_BASE_URL:https://api.frankfurter.dev}
 
 frontend:
   url: http://localhost:3000

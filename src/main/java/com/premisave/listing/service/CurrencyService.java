@@ -11,25 +11,34 @@ import org.springframework.web.client.RestTemplate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * CurrencyService
  *
- * Wraps the FastForex real-time exchange rate API.
+ * Wraps the Frankfurter exchange rate API (https://frankfurter.dev) — free,
+ * open-source, no API key required, sourced from 84 central banks.
+ *
  * All rates are fetched FROM KES (the system's canonical currency).
  *
- * Caching strategy:
+ * NOTE: The legacy Frankfurter v1 API only covers ~30 major (mostly ECB)
+ * currencies and does NOT support KES. This service uses the v2 API
+ * (https://api.frankfurter.dev/v2), which covers 200+ currencies including KES.
+ *
+ * Caching strategy (unchanged from the previous FastForex implementation):
  *   - Full rate table cached in Redis for 1 hour under key "fx:rates:KES"
  *   - Individual pair lookups read from that cached map — no extra API calls
  *   - On cache miss, the full table is refreshed in one API call
  *   - This means regardless of how many users are converting currencies
  *     simultaneously, the system makes at most 1 API call per hour
  *
- * FastForex API:
- *   GET https://api.fastforex.io/fetch-all?from=KES&api_key={key}
- *   Response: { "base": "KES", "results": { "USD": 0.00775, "EUR": 0.00712, ... }, "updated": "...", "ms": 3 }
+ * Frankfurter v2 API:
+ *   GET https://api.frankfurter.dev/v2/rates?base=KES
+ *   Response: a JSON array of { "date": "...", "base": "KES", "quote": "USD", "rate": 0.00775 }
+ *   one entry per supported currency (no API key needed).
  */
 @Slf4j
 @Service
@@ -39,10 +48,7 @@ public class CurrencyService {
     private final RestTemplate restTemplate;
     private final StringRedisTemplate redisTemplate;
 
-    @Value("${fastforex.api-key}")
-    private String apiKey;
-
-    @Value("${fastforex.base-url:https://api.fastforex.io}")
+    @Value("${frankfurter.base-url:https://api.frankfurter.dev}")
     private String baseUrl;
 
     /** Canonical system currency — all amounts stored in KES on the backend */
@@ -109,6 +115,11 @@ public class CurrencyService {
     public BigDecimal getRate(String targetCurrency) {
         String upper = targetCurrency.toUpperCase();
 
+        // KES → KES is always 1, and Frankfurter never returns the base as one of the quotes
+        if (upper.equals(BASE_CURRENCY)) {
+            return BigDecimal.ONE;
+        }
+
         // 1. Try Redis cache
         String cached = redisTemplate.opsForHash().get(REDIS_KEY, upper) != null
                 ? (String) redisTemplate.opsForHash().get(REDIS_KEY, upper)
@@ -120,7 +131,7 @@ public class CurrencyService {
         }
 
         // 2. Cache miss — refresh full rate table
-        log.info("Cache MISS for {}. Fetching full rate table from FastForex.", upper);
+        log.info("Cache MISS for {}. Fetching full rate table from Frankfurter.", upper);
         refreshRates();
 
         // 3. Try again after refresh
@@ -161,46 +172,51 @@ public class CurrencyService {
     // ====================== CACHE REFRESH ======================
 
     /**
-     * Fetches the full KES-based rate table from FastForex and stores it in Redis.
+     * Fetches the full KES-based rate table from Frankfurter and stores it in Redis.
      * Called on cache miss. Can also be called by a scheduler to pre-warm the cache.
+     *
+     * Frankfurter's /v2/rates endpoint returns a JSON array, one row per quote
+     * currency, e.g.:
+     *   [{"date":"2026-06-19","base":"KES","quote":"USD","rate":0.00775}, ...]
      */
     @SuppressWarnings("unchecked")
     public void refreshRates() {
-        String url = baseUrl + "/fetch-all?from=" + BASE_CURRENCY + "&api_key=" + apiKey;
+        String url = baseUrl + "/v2/rates?base=" + BASE_CURRENCY;
 
         try {
-            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            ResponseEntity<List> response = restTemplate.getForEntity(url, List.class);
 
-            if (response.getBody() == null) {
-                log.error("FastForex returned empty response body.");
+            List<Map<String, Object>> body = response.getBody();
+            if (body == null || body.isEmpty()) {
+                log.error("Frankfurter returned an empty rates list for base={}", BASE_CURRENCY);
                 return;
             }
 
-            Map<String, Object> body = response.getBody();
-            Map<String, Object> results = (Map<String, Object>) body.get("results");
-
-            if (results == null || results.isEmpty()) {
-                log.error("FastForex response missing 'results' field: {}", body);
-                return;
+            Map<String, String> rateStrings = new HashMap<>();
+            for (Map<String, Object> row : body) {
+                Object quoteObj = row.get("quote");
+                Object rateObj = row.get("rate");
+                if (quoteObj == null || rateObj == null) {
+                    continue;
+                }
+                rateStrings.put(quoteObj.toString(), rateObj.toString());
             }
 
-            // Store each rate as a string in the Redis hash
-            Map<String, String> rateStrings = new java.util.HashMap<>();
-            results.forEach((currency, rate) ->
-                rateStrings.put(currency, rate.toString())
-            );
+            if (rateStrings.isEmpty()) {
+                log.error("Frankfurter response had no usable quote/rate entries: {}", body);
+                return;
+            }
 
             // Atomic replace: delete old hash, write new one, set TTL
             redisTemplate.delete(REDIS_KEY);
             redisTemplate.opsForHash().putAll(REDIS_KEY, rateStrings);
             redisTemplate.expire(REDIS_KEY, CACHE_TTL);
 
-            String updated = (String) body.getOrDefault("updated", "unknown");
-            log.info("Exchange rates refreshed: {} currencies cached. FastForex updated at: {}",
-                    rateStrings.size(), updated);
+            log.info("Exchange rates refreshed: {} currencies cached from Frankfurter (base={}).",
+                    rateStrings.size(), BASE_CURRENCY);
 
         } catch (Exception e) {
-            log.error("Failed to refresh exchange rates from FastForex: {}", e.getMessage(), e);
+            log.error("Failed to refresh exchange rates from Frankfurter: {}", e.getMessage(), e);
             // Do not rethrow — stale cache is better than a crash
         }
     }
