@@ -22,6 +22,7 @@ import java.util.Map;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final CurrencyService currencyService;
 
     /**
      * AdPromotionService is injected lazily to break the circular dependency:
@@ -36,80 +37,102 @@ public class PaymentService {
     /**
      * Initiates a payment record.
      *
-     * - MPESA: sets status PENDING; actual confirmation comes via callback.
-     * - Other methods (CARD, PAYPAL): sets COMPLETED immediately.
-     *   NOTE: In production, non-M-Pesa methods must call their respective
-     *   gateway SDK here and only set COMPLETED on a successful gateway response.
-     *
-     * Receipts are NOT generated server-side. The frontend constructs receipts
-     * from the Payment response data (id, amount, status, method, paidAt, transactionRef).
+     * Currency handling:
+     * - amountKes is the canonical amount in KES (always stored on the Payment record)
+     * - currency is the user's preferred currency (defaults to KES if null/blank)
+     * - If currency != KES, the amount is converted using the live FastForex rate
+     * - The exchange rate used is stored on the Payment for audit/reconciliation
+     * - M-Pesa always receives KES — conversion is transparent
+     * - Stripe/PayPal/Airtel receive the target currency natively
      *
      * @param userId         the paying user
      * @param subscriptionId optional — null when paying for a promotion
-     * @param amount         amount to charge
-     * @param method         payment method chosen by the user
+     * @param amountKes      amount in KES (the canonical backend currency)
+     * @param method         payment method
+     * @param currency       user's preferred display/charge currency (ISO 4217, defaults to KES)
      * @return the persisted Payment entity
      */
     @Transactional
     public Payment processPayment(String userId,
                                   String subscriptionId,
-                                  BigDecimal amount,
-                                  PaymentMethod method) {
+                                  BigDecimal amountKes,
+                                  PaymentMethod method,
+                                  String currency) {
         if (userId == null || userId.isBlank()) {
             throw new IllegalArgumentException("userId must not be null or blank.");
         }
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+        if (amountKes == null || amountKes.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Payment amount must be positive.");
         }
         if (method == null) {
             throw new IllegalArgumentException("Payment method must be specified.");
         }
 
+        // Normalise currency — default to KES
+        String targetCurrency = (currency == null || currency.isBlank())
+                ? CurrencyService.BASE_CURRENCY
+                : currency.toUpperCase();
+
+        // Convert KES → target currency for the charge amount
+        BigDecimal chargeAmount;
+        BigDecimal exchangeRate;
+
+        if (targetCurrency.equals(CurrencyService.BASE_CURRENCY)) {
+            chargeAmount = amountKes;
+            exchangeRate = BigDecimal.ONE;
+        } else {
+            exchangeRate = currencyService.getRate(targetCurrency);
+            chargeAmount = currencyService.convertFromKes(amountKes, targetCurrency);
+            log.info("Currency conversion: {} KES → {} {} (rate: {})",
+                    amountKes, chargeAmount, targetCurrency, exchangeRate);
+        }
+
         Payment payment = new Payment();
         payment.setUserId(userId);
         payment.setSubscriptionId(subscriptionId);
-        payment.setAmount(amount);
+        payment.setAmountKes(amountKes);          // canonical KES amount — always stored
+        payment.setAmount(chargeAmount);           // amount in user's currency
+        payment.setCurrency(targetCurrency);
+        payment.setExchangeRate(exchangeRate);
         payment.setMethod(method);
         payment.setTransactionRef("TXN-" + System.currentTimeMillis());
 
         if (method == PaymentMethod.MPESA) {
             // M-Pesa is async — stay PENDING until callback arrives
+            // M-Pesa always processes in KES regardless of display currency
             payment.setStatus(PaymentStatus.PENDING);
             payment.setPaidAt(null);
         } else {
             // Synchronous methods — mark completed immediately
             // TODO: Replace with actual gateway integration (Stripe, PayPal SDK, etc.)
+            // Pass chargeAmount + targetCurrency to the gateway for foreign currency payments
             payment.setStatus(PaymentStatus.COMPLETED);
             payment.setPaidAt(LocalDateTime.now());
         }
 
         Payment saved = paymentRepository.save(payment);
 
-        log.info("Payment initiated: id={}, method={}, amount={}, status={}, user={}",
-                saved.getId(), method, amount, saved.getStatus(), userId);
+        log.info("Payment initiated: id={}, method={}, amountKes={}, charged={} {}, rate={}, status={}, user={}",
+                saved.getId(), method, amountKes, chargeAmount, targetCurrency,
+                exchangeRate, saved.getStatus(), userId);
         return saved;
+    }
+
+    /**
+     * Overload for backward compatibility — defaults to KES when no currency specified.
+     * Used internally by AdPromotionService and SubscriptionService where currency
+     * is not yet threaded through.
+     */
+    @Transactional
+    public Payment processPayment(String userId,
+                                  String subscriptionId,
+                                  BigDecimal amountKes,
+                                  PaymentMethod method) {
+        return processPayment(userId, subscriptionId, amountKes, method, CurrencyService.BASE_CURRENCY);
     }
 
     // ====================== M-PESA CALLBACK ======================
 
-    /**
-     * Handles the STK Push callback from Safaricom Daraja.
-     *
-     * The callback structure from Safaricom is:
-     * {
-     *   "Body": {
-     *     "stkCallback": {
-     *       "MerchantRequestID": "...",
-     *       "CheckoutRequestID": "...",   ← this is what we store as transactionRef
-     *       "ResultCode": 0,              ← 0 = success
-     *       "ResultDesc": "The service request is processed successfully."
-     *     }
-     *   }
-     * }
-     *
-     * We match on CheckoutRequestID which must have been stored in transactionRef
-     * when the STK push was initiated.
-     */
     @Transactional
     public void handleMpesaCallback(Map<String, Object> callbackPayload) {
         try {
@@ -136,14 +159,13 @@ public class PaymentService {
 
             Object resultCodeObj = stkCallback.get("ResultCode");
             String checkoutRequestId = (String) stkCallback.get("CheckoutRequestID");
-            String resultDesc       = (String) stkCallback.get("ResultDesc");
+            String resultDesc        = (String) stkCallback.get("ResultDesc");
 
             if (checkoutRequestId == null || checkoutRequestId.isBlank()) {
                 log.warn("M-Pesa callback: CheckoutRequestID is missing — cannot match payment.");
                 return;
             }
 
-            // ResultCode 0 = success; anything else = failure
             boolean isSuccess = "0".equals(String.valueOf(resultCodeObj));
             PaymentStatus status = isSuccess ? PaymentStatus.COMPLETED : PaymentStatus.FAILED;
 
@@ -155,7 +177,7 @@ public class PaymentService {
 
             Payment payment = payments.get(0);
 
-            // Idempotency guard — don't reprocess an already-confirmed payment
+            // Idempotency guard
             if (payment.getStatus() == PaymentStatus.COMPLETED) {
                 log.info("M-Pesa callback: payment {} already COMPLETED — skipping.", payment.getId());
                 return;
@@ -166,9 +188,8 @@ public class PaymentService {
             paymentRepository.save(payment);
 
             if (isSuccess) {
-                log.info("M-Pesa payment CONFIRMED: paymentId={}, ref={}", payment.getId(), checkoutRequestId);
-
-                // Trigger downstream activation (promotion or subscription)
+                log.info("M-Pesa payment CONFIRMED: paymentId={}, ref={}, amountKes={}",
+                        payment.getId(), checkoutRequestId, payment.getAmountKes());
                 notifyPaymentConfirmed(payment);
             } else {
                 log.warn("M-Pesa payment FAILED: ref={}, reason={}", checkoutRequestId, resultDesc);
@@ -176,14 +197,9 @@ public class PaymentService {
 
         } catch (Exception e) {
             log.error("Unexpected error processing M-Pesa callback: {}", e.getMessage(), e);
-            // Do NOT rethrow — Safaricom expects a 200 OK even on our internal errors
         }
     }
 
-    /**
-     * After M-Pesa confirms a payment, activate whatever service the payment was for.
-     * Currently handles promotion activation; extend here for subscriptions.
-     */
     private void notifyPaymentConfirmed(Payment payment) {
         try {
             adPromotionService.activatePromotionAfterMpesaPayment(payment.getId());
@@ -191,12 +207,9 @@ public class PaymentService {
             log.error("Failed to activate promotion after payment {}: {}", payment.getId(), e.getMessage(), e);
         }
 
-        // If subscriptionId is set, the subscription was also waiting on this payment
         if (payment.getSubscriptionId() != null) {
             log.info("Payment {} linked to subscriptionId {} confirmed — subscription is now active.",
                     payment.getId(), payment.getSubscriptionId());
-            // SubscriptionService doesn't need a callback because it's created synchronously
-            // for non-M-Pesa. For M-Pesa subscriptions, add activation logic here.
         }
     }
 
