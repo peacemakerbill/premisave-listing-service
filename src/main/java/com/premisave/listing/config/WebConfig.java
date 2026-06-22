@@ -18,6 +18,17 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(rateLimiterInterceptor)
                 .addPathPatterns("/**")
-                .excludePathPatterns("/public/**", "/health", "/swagger-ui/**", "/v3/api-docs/**");
+                .excludePathPatterns(
+                    "/public/**",
+                    "/health",
+                    "/swagger-ui/**",
+                    "/v3/api-docs/**",
+                    // M-Pesa callbacks come from Safaricom servers — exclude from rate limiting
+                    // so retries are never dropped
+                    "/payments/mpesa/callback",
+                    "/payments/mpesa/confirmation",
+                    "/payments/mpesa/validation",
+                    "/payments/mpesa/c2b/status"
+                );
     }
 }

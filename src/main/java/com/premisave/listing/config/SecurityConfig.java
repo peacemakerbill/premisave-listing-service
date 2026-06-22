@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 @Configuration
-@EnableMethodSecurity   // enables @PreAuthorize on controller methods
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -74,12 +74,19 @@ public class SecurityConfig {
             .cors(cors -> cors.configure(http))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/public/**", "/health", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // M-Pesa callbacks are called by Safaricom — no JWT, must be public
+                .requestMatchers(
+                    "/payments/mpesa/callback",
+                    "/payments/mpesa/confirmation",
+                    "/payments/mpesa/validation",
+                    "/payments/mpesa/c2b/status"
+                ).permitAll()
                 .requestMatchers("/admin/**").hasAnyRole("ADMIN", "FINANCE")
                 .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex
-                .authenticationEntryPoint(authenticationEntryPoint())   // 401
-                .accessDeniedHandler(accessDeniedHandler())              // 403
+                .authenticationEntryPoint(authenticationEntryPoint())
+                .accessDeniedHandler(accessDeniedHandler())
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

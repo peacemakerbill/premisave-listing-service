@@ -11,6 +11,10 @@ spring:
     multipart:
       max-file-size: 20MB
       max-request-size: 50MB
+    # Context path — all controllers are reachable under /api
+    # e.g. POST /api/payments/mpesa/callback
+    # Keep this in sync with the mpesa.daraja.*-url paths below
+    context-path: /api
 
 server:
   port: 8082
@@ -41,15 +45,25 @@ ad:
     default-currency: KES
 
 # ====================== M-PESA DARAJA CONFIG ======================
+# IMPORTANT: The *-url values below MUST be publicly reachable by Safaricom.
+# localhost will NOT work in any deployed environment.
+# Always set MPESA_CALLBACK_URL, MPESA_CONFIRMATION_URL, and MPESA_VALIDATION_URL
+# as environment variables pointing to your live/ngrok/tunnel URL before testing.
+#
+# Example (ngrok for local dev):
+#   MPESA_CALLBACK_URL=https://abc123.ngrok.io/api/payments/mpesa/callback
+#
+# Example (production):
+#   MPESA_CALLBACK_URL=https://api.premisave.com/api/payments/mpesa/callback
 mpesa:
   daraja:
     consumer-key: ${MPESA_CONSUMER_KEY:your_consumer_key_here}
     consumer-secret: ${MPESA_CONSUMER_SECRET:your_consumer_secret_here}
     shortcode: ${MPESA_SHORTCODE:174379}
     passkey: ${MPESA_PASSKEY:your_passkey_here}
-    callback-url: ${MPESA_CALLBACK_URL:http://localhost:8082/api/payments/mpesa/callback}
-    confirmation-url: ${MPESA_CONFIRMATION_URL:http://localhost:8082/api/payments/mpesa/confirmation}
-    validation-url: ${MPESA_VALIDATION_URL:http://localhost:8082/api/payments/mpesa/validation}
+    callback-url: ${MPESA_CALLBACK_URL:https://your-public-domain.com/api/payments/mpesa/callback}
+    confirmation-url: ${MPESA_CONFIRMATION_URL:https://your-public-domain.com/api/payments/mpesa/confirmation}
+    validation-url: ${MPESA_VALIDATION_URL:https://your-public-domain.com/api/payments/mpesa/validation}
     environment: sandbox
 
 # ====================== FRANKFURTER CURRENCY API ======================
