@@ -40,13 +40,13 @@ public class PaymentService {
      * Currency handling:
      * - amountKes is the canonical amount in KES (always stored on the Payment record)
      * - currency is the user's preferred currency (defaults to KES if null/blank)
-     * - If currency != KES, the amount is converted using the live FastForex rate
+     * - If currency != KES, the amount is converted using the live Frankfurter rate
      * - The exchange rate used is stored on the Payment for audit/reconciliation
      * - M-Pesa always receives KES — conversion is transparent
      * - Stripe/PayPal/Airtel receive the target currency natively
      *
      * @param userId         the paying user
-     * @param subscriptionId optional — null when paying for a promotion
+     * @param referenceId    optional reference ID (e.g. promotion ID); null is allowed
      * @param amountKes      amount in KES (the canonical backend currency)
      * @param method         payment method
      * @param currency       user's preferred display/charge currency (ISO 4217, defaults to KES)
@@ -54,7 +54,7 @@ public class PaymentService {
      */
     @Transactional
     public Payment processPayment(String userId,
-                                  String subscriptionId,
+                                  String referenceId,
                                   BigDecimal amountKes,
                                   PaymentMethod method,
                                   String currency) {
@@ -89,9 +89,9 @@ public class PaymentService {
 
         Payment payment = new Payment();
         payment.setUserId(userId);
-        payment.setSubscriptionId(subscriptionId);
-        payment.setAmountKes(amountKes);          // canonical KES amount — always stored
-        payment.setAmount(chargeAmount);           // amount in user's currency
+        payment.setSubscriptionId(referenceId); // kept on entity for backward compat; null for promotions
+        payment.setAmountKes(amountKes);
+        payment.setAmount(chargeAmount);
         payment.setCurrency(targetCurrency);
         payment.setExchangeRate(exchangeRate);
         payment.setMethod(method);
@@ -99,13 +99,11 @@ public class PaymentService {
 
         if (method == PaymentMethod.MPESA) {
             // M-Pesa is async — stay PENDING until callback arrives
-            // M-Pesa always processes in KES regardless of display currency
             payment.setStatus(PaymentStatus.PENDING);
             payment.setPaidAt(null);
         } else {
             // Synchronous methods — mark completed immediately
             // TODO: Replace with actual gateway integration (Stripe, PayPal SDK, etc.)
-            // Pass chargeAmount + targetCurrency to the gateway for foreign currency payments
             payment.setStatus(PaymentStatus.COMPLETED);
             payment.setPaidAt(LocalDateTime.now());
         }
@@ -119,16 +117,14 @@ public class PaymentService {
     }
 
     /**
-     * Overload for backward compatibility — defaults to KES when no currency specified.
-     * Used internally by AdPromotionService and SubscriptionService where currency
-     * is not yet threaded through.
+     * Overload — defaults to KES when no currency is specified.
      */
     @Transactional
     public Payment processPayment(String userId,
-                                  String subscriptionId,
+                                  String referenceId,
                                   BigDecimal amountKes,
                                   PaymentMethod method) {
-        return processPayment(userId, subscriptionId, amountKes, method, CurrencyService.BASE_CURRENCY);
+        return processPayment(userId, referenceId, amountKes, method, CurrencyService.BASE_CURRENCY);
     }
 
     // ====================== M-PESA CALLBACK ======================
@@ -205,11 +201,6 @@ public class PaymentService {
             adPromotionService.activatePromotionAfterMpesaPayment(payment.getId());
         } catch (Exception e) {
             log.error("Failed to activate promotion after payment {}: {}", payment.getId(), e.getMessage(), e);
-        }
-
-        if (payment.getSubscriptionId() != null) {
-            log.info("Payment {} linked to subscriptionId {} confirmed — subscription is now active.",
-                    payment.getId(), payment.getSubscriptionId());
         }
     }
 

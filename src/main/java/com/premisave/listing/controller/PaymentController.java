@@ -28,13 +28,12 @@ public class PaymentController {
     // Traditional Payment
     @PostMapping
     public ResponseEntity<Payment> processPayment(
-            @RequestParam String subscriptionId,
             @RequestParam BigDecimal amount,
             @RequestParam PaymentMethod method,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        Payment payment = paymentService.processPayment(userId, subscriptionId, amount, method);
+        Payment payment = paymentService.processPayment(userId, null, amount, method);
         return ResponseEntity.ok(payment);
     }
 
@@ -46,7 +45,7 @@ public class PaymentController {
 
         String userId = jwtUtil.extractUserId(authorization);
         Map<String, Object> response = mpesaService.initiateStkPush(request);
-        
+
         log.info("M-Pesa STK Push initiated for user: {}", userId);
         return ResponseEntity.ok(response);
     }
