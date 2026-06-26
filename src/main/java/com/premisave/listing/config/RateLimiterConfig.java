@@ -15,7 +15,8 @@ public class RateLimiterConfig {
     @Value("${rate-limit.requests-per-minute:100}")
     private int requestsPerMinute;
 
-    @Bean
+    @SuppressWarnings("deprecation")
+	@Bean
     public Bucket rateLimiterBucket() {
         Refill refill = Refill.intervally(requestsPerMinute, Duration.ofMinutes(1));
         Bandwidth bandwidth = Bandwidth.classic(requestsPerMinute, refill);

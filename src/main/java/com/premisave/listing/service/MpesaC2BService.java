@@ -36,7 +36,8 @@ public class MpesaC2BService {
                 : "https://api.safaricom.co.ke";
     }
 
-    public void registerC2BUrls() {
+    @SuppressWarnings("rawtypes")
+	public void registerC2BUrls() {
         String accessToken = mpesaService.getAccessToken();
         String url = getBaseUrl() + "/mpesa/c2b/v2/registerurl";
 

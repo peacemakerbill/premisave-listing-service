@@ -1,40 +1,49 @@
 spring:
   application:
     name: premisave-listing-service
+
   data:
     mongodb:
-      uri: mongodb://localhost:27017/premisave-listing
+      uri: ${MONGODB_URI:mongodb://localhost:27017/premisave-listing}
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false  # Prevents Redis from claiming MongoDB repositories
+
   servlet:
     multipart:
       max-file-size: 20MB
       max-request-size: 50MB
 
+  cloud:
+    discovery:
+      enabled: false
+
+# ==================== Server ====================
 server:
   port: 8082
 
-# Auth Service
+# ==================== Auth Service ====================
 auth:
   service:
-    url: http://localhost:8080
+    url: ${AUTH_SERVICE_URL:http://localhost:8080}
 
-# JWT
+# ==================== JWT ====================
 jwt:
-  secret: eW91ci12ZXJ5LXNlY3VyZS1qd3Qtc2VjcmV0LWtleS0zMi1ieXRlcyE=
+  secret: ${JWT_SECRET:eW91ci12ZXJ5LXNlY3VyZS1qd3Qtc2VjcmV0LWtleS0zMi1ieXRlcyE=}
 
-# Cloudinary
+# ==================== Cloudinary ====================
 cloudinary:
-  cloud-name: thepeacemakersllc
-  api-key: 929659223288334
-  api-secret: nAsBdgfXx86u7-Y8X2VnLa-2FbQ
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:thepeacemakersllc}
+  api-key: ${CLOUDINARY_API_KEY:929659223288334}
+  api-secret: ${CLOUDINARY_API_SECRET:nAsBdgfXx86u7-Y8X2VnLa-2FbQ}
 
-# Rate Limiting
+# ==================== Rate Limiting ====================
 rate-limit:
   requests-per-minute: 100
 
-# Ad Promotion
+# ==================== Ad Promotion ====================
 ad:
   promotion:
     daily-rate: 299
@@ -60,15 +69,20 @@ mpesa:
     callback-url: ${MPESA_CALLBACK_URL:https://your-public-domain.com/payments/mpesa/callback}
     confirmation-url: ${MPESA_CONFIRMATION_URL:https://your-public-domain.com/payments/mpesa/confirmation}
     validation-url: ${MPESA_VALIDATION_URL:https://your-public-domain.com/payments/mpesa/validation}
-    environment: sandbox
+    environment: ${MPESA_ENV:sandbox}
 
 # ====================== FRANKFURTER CURRENCY API ======================
 frankfurter:
   base-url: ${FRANKFURTER_BASE_URL:https://api.frankfurter.dev}
 
+# ==================== Frontend ====================
 frontend:
-  url: http://localhost:3000
+  url: ${FRONTEND_URL:http://localhost:3000}
 
+# ==================== Logging ====================
 logging:
   level:
-    com.premisave: DEBUG
+    "[com.premisave]": DEBUG
+    "[org.springframework.data.mongodb]": WARN
+    "[org.springframework.data.repository.config.RepositoryConfigurationExtensionSupport]": ERROR
+    "[org.springframework.cloud.commons.util.InetUtils]": ERROR

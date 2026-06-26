@@ -51,7 +51,8 @@ public class MpesaService {
 
     // ====================== ACCESS TOKEN ======================
 
-    public String getAccessToken() {
+    @SuppressWarnings("rawtypes")
+	public String getAccessToken() {
         String url = getBaseUrl() + "/oauth/v1/generate?grant_type=client_credentials";
         String auth = Base64.getEncoder().encodeToString((consumerKey + ":" + consumerSecret).getBytes());
 
@@ -80,7 +81,8 @@ public class MpesaService {
      * @param paymentId  the Payment.id already created by PaymentService — we update its transactionRef
      * @return the raw Safaricom response
      */
-    public Map<String, Object> initiateStkPush(MpesaStkPushRequest request, String paymentId) {
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+	public Map<String, Object> initiateStkPush(MpesaStkPushRequest request, String paymentId) {
         String accessToken = getAccessToken();
         String url = getBaseUrl() + "/mpesa/stkpush/v1/processrequest";
 

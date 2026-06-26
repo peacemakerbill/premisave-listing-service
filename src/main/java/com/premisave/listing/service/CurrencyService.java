@@ -179,7 +179,7 @@ public class CurrencyService {
      * currency, e.g.:
      *   [{"date":"2026-06-19","base":"KES","quote":"USD","rate":0.00775}, ...]
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     public void refreshRates() {
         String url = baseUrl + "/v2/rates?base=" + BASE_CURRENCY;
 
