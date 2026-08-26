@@ -16,7 +16,6 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Central exception handling. The guiding rule applied throughout: an
@@ -168,15 +167,17 @@ public class GlobalExceptionHandler {
 
     /**
      * MongoDB (or any Spring Data-backed store) is unreachable or errored.
-     * Unlike the WARN-only handlers above, this gets a full stack trace —
-     * a database failure is always worth investigating.
+     * Logged as a single line (message only, no stack trace) so the
+     * console stays readable while testing — the full detail is returned
+     * in the response body instead, for exactly this kind of hands-on
+     * Postman testing.
      */
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ApiResponse<String>> handleDataAccessException(DataAccessException ex) {
-        log.error("Database error: {}", ex.getMessage(), ex);
+        log.error("Database error: {} — {}", ex.getClass().getSimpleName(), ex.getMessage());
         ApiResponse<String> response = new ApiResponse<>(
             false,
-            "A database error occurred. Please try again shortly.",
+            ex.getClass().getSimpleName() + ": " + ex.getMessage(),
             null
         );
         return new ResponseEntity<>(response, HttpStatus.SERVICE_UNAVAILABLE);
@@ -186,7 +187,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<String>> handleRuntimeException(RuntimeException ex) {
-        log.error("RuntimeException: {}", ex.getMessage(), ex);
+        log.error("RuntimeException: {}", ex.getMessage());
         ApiResponse<String> response = new ApiResponse<>(
             false, ex.getMessage(), null
         );
@@ -194,18 +195,22 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Catch-all for anything unexpected. Full detail goes to the logs with
-     * a correlation ID; the client only gets a generic message plus that ID
-     * so a report can be matched back to the log entry without exposing
-     * internals.
+     * Catch-all for anything unexpected. No stack trace printed here either
+     * — the exception's own class name and message are returned directly
+     * in the response body (visible in Postman/etc.) instead, since that's
+     * now the only place the detail is surfaced at all. Note for later:
+     * exposing raw exception messages to API clients like this is a minor
+     * information-disclosure tradeoff worth reconsidering (e.g. gating
+     * behind a dev/local profile) before this goes anywhere near
+     * production traffic — fine deliberately for now while iterating
+     * locally.
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<String>> handleGeneralException(Exception ex) {
-        String correlationId = UUID.randomUUID().toString();
-        log.error("Unexpected error occurred [correlationId={}]: {}", correlationId, ex.getMessage(), ex);
+        log.error("Unexpected error: {} — {}", ex.getClass().getSimpleName(), ex.getMessage());
         ApiResponse<String> response = new ApiResponse<>(
             false,
-            "An unexpected error occurred. Reference: " + correlationId,
+            ex.getClass().getSimpleName() + ": " + ex.getMessage(),
             null
         );
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);

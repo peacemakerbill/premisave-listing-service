@@ -95,7 +95,10 @@ public class JwtService {
             if (username == null) return false;
             return !isTokenExpired(token);
         } catch (Exception e) {
-            log.error("Token validation failed", e);
+            // WARN, message only — an expired or malformed token is a
+            // routine, expected occurrence (happens on every stale
+            // session), not something worth a stack trace every time.
+            log.warn("Token validation failed: {}", e.getMessage());
             return false;
         }
     }

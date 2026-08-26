@@ -114,8 +114,8 @@ public class PaymentService {
             }
         } catch (Exception e) {
             payment.setStatus(PaymentStatus.FAILED);
-            log.error("Wallet debit call errored: userId={}, reference={}, error={}",
-                    userId, reference, e.getMessage(), e);
+            log.error("Wallet debit call errored: userId={}, reference={}, error={}: {}",
+                    userId, reference, e.getClass().getSimpleName(), e.getMessage());
         }
 
         return paymentRepository.save(payment);
