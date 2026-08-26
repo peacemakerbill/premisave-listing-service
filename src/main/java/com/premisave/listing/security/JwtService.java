@@ -60,28 +60,33 @@ public class JwtService {
     }
 
     /**
-     * Mirrors auth-service key derivation exactly:
-     * truncate/pad to 32 bytes so tokens are cross-verifiable.
+     * Mirrors auth-service key derivation exactly: truncate/pad to 32 bytes
+     * so tokens are cross-verifiable.
+     *
+     * Previously, if decoding/padding failed here, this silently fell back
+     * to signing with the *raw, unpadded* secret bytes — a different key
+     * derivation than the padded/truncated one used on the success path —
+     * while only logging an error rather than surfacing the failure. That
+     * meant a misconfigured secret could silently verify tokens against the
+     * wrong key instead of failing loudly. It now propagates the failure
+     * (caught by extractAllClaims/extractClaim above, same as any other
+     * malformed-token case): a bad secret is a startup/config problem that
+     * should be visible, not papered over per-request.
      */
     private SecretKey getSignInKey() {
-        try {
-            byte[] keyBytes = Decoders.BASE64.decode(secret);
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
 
-            if (keyBytes.length < 32) {
-                byte[] padded = new byte[32];
-                System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
-                keyBytes = padded;
-            } else if (keyBytes.length > 32) {
-                byte[] truncated = new byte[32];
-                System.arraycopy(keyBytes, 0, truncated, 0, 32);
-                keyBytes = truncated;
-            }
-
-            return Keys.hmacShaKeyFor(keyBytes);
-        } catch (Exception e) {
-            log.error("Failed to create signing key", e);
-            return Keys.hmacShaKeyFor(secret.getBytes());
+        if (keyBytes.length < 32) {
+            byte[] padded = new byte[32];
+            System.arraycopy(keyBytes, 0, padded, 0, keyBytes.length);
+            keyBytes = padded;
+        } else if (keyBytes.length > 32) {
+            byte[] truncated = new byte[32];
+            System.arraycopy(keyBytes, 0, truncated, 0, 32);
+            keyBytes = truncated;
         }
+
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public boolean isTokenValid(String token) {

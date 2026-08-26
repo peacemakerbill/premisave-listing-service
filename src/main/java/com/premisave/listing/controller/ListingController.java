@@ -7,15 +7,17 @@ import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingUpdateRequest;
 import com.premisave.listing.dto.ListingResponse;
 import com.premisave.listing.dto.MyListingResponse;
+import com.premisave.listing.entity.ListingPromotion;
 import com.premisave.listing.entity.ShortTermRental;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
-import com.premisave.listing.enums.PaymentMethod;
 import com.premisave.listing.service.AdPromotionService;
 import com.premisave.listing.service.ListingService;
 import com.premisave.listing.util.JwtUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -48,6 +50,7 @@ public class ListingController {
                 : List.of();
 
         if (!validFiles.isEmpty()) {
+            validateImageFiles(validFiles);
             List<String> imageUrls = listingService.uploadImages(validFiles);
             request.setImageUrls(imageUrls);
             if (!imageUrls.isEmpty() && (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank())) {
@@ -80,12 +83,16 @@ public class ListingController {
                 : List.of();
 
         if (!validFiles.isEmpty()) {
+            validateImageFiles(validFiles);
             List<String> newImageUrls = listingService.uploadImages(validFiles);
             if (request.getImageUrls() == null) {
                 request.setImageUrls(new ArrayList<>());
             }
             request.getImageUrls().addAll(newImageUrls);
-            if (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank()) {
+            // Guard added: uploadImages returning fewer URLs than files sent
+            // (a partial upload failure) previously risked an
+            // IndexOutOfBoundsException here.
+            if (!newImageUrls.isEmpty() && (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank())) {
                 request.setMainImageUrl(newImageUrls.get(0));
             }
         }
@@ -146,54 +153,57 @@ public class ListingController {
     /**
      * Promote a listing.
      *
-     * POST /listings/promote?method=MPESA
+     * POST /listings/promote
      *
      * A listing cannot be promoted if it already has an active promotion.
      * Use /listings/{id}/extend to add more days to an existing promotion.
      *
-     * @param method payment method (defaults to MPESA)
+     * NOTE: the `method` parameter (PAYPAL/STRIPE/MPESA/AIRTEL_MONEY) is
+     * gone — payment now always goes through a wallet-service debit, which
+     * abstracts the funding provider away entirely.
      */
     @PostMapping("/promote")
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<AdPromotionResponse> promoteListing(
             @Valid @RequestBody AdPromotionRequest request,
-            @RequestParam(defaultValue = "MPESA") PaymentMethod method,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization, method);
+        AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization);
         return ResponseEntity.ok(response);
     }
 
     /**
      * Extend an existing promotion.
      *
-     * POST /listings/{id}/extend?days=7&method=MPESA
+     * POST /listings/{id}/extend?days=7
      *
      * Can be called even while the promotion is still active —
      * days are added on top of the current end date.
-     *
-     * @param method payment method (defaults to MPESA)
      */
     @PostMapping("/{id}/extend")
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<AdPromotionResponse> extendPromotion(
             @PathVariable String id,
             @RequestParam int days,
-            @RequestParam(defaultValue = "MPESA") PaymentMethod method,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization, method);
+        AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization);
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Paginated — previously returned every promotion a user ever had in
+     * one unbounded response.
+     */
     @GetMapping("/promotions/my")
     @PreAuthorize("hasRole('HOME_OWNER')")
-    public ResponseEntity<List<com.premisave.listing.entity.ListingPromotion>> getMyPromotions(
-            @RequestHeader("Authorization") String authorization) {
+    public ResponseEntity<Page<ListingPromotion>> getMyPromotions(
+            @RequestHeader("Authorization") String authorization,
+            Pageable pageable) {
         String userId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(adPromotionService.getUserPromotions(userId));
+        return ResponseEntity.ok(adPromotionService.getUserPromotions(userId, pageable));
     }
 
     // ====================== DISCOVERY ======================
@@ -233,6 +243,24 @@ public class ListingController {
     public ResponseEntity<List<String>> uploadImages(
             @RequestParam("files") List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
+        validateImageFiles(files);
         return ResponseEntity.ok(listingService.uploadImages(files));
+    }
+
+    // ====================== HELPERS ======================
+
+    /**
+     * Basic content-type check before handing files to Cloudinary — none of
+     * the upload paths previously validated MIME type at all, only that the
+     * file wasn't empty.
+     */
+    private void validateImageFiles(List<MultipartFile> files) {
+        for (MultipartFile file : files) {
+            String contentType = file.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                throw new IllegalArgumentException(
+                        "Invalid file type: " + file.getOriginalFilename() + ". Only image uploads are allowed.");
+            }
+        }
     }
 }

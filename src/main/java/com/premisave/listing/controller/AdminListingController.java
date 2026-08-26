@@ -3,11 +3,11 @@ package com.premisave.listing.controller;
 import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.service.AdminService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/admin/listings")
@@ -19,16 +19,19 @@ public class AdminListingController {
     // ====================== READ ======================
 
     /**
-     * Get all listings with optional filters.
+     * Get all listings with optional filters, paginated (page/size/sort
+     * query params are resolved automatically into Pageable). Previously
+     * returned every matching listing in one unbounded response.
      * ADMIN and FINANCE roles allowed.
      */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'FINANCE')")
-    public ResponseEntity<List<Object>> getAllListings(
+    public ResponseEntity<Page<Object>> getAllListings(
             @RequestParam(required = false) Boolean deleted,
             @RequestParam(required = false) Boolean archived,
-            @RequestParam(required = false) ListingStatus status) {
-        return ResponseEntity.ok(adminService.getAllListings(deleted, archived, status));
+            @RequestParam(required = false) ListingStatus status,
+            Pageable pageable) {
+        return ResponseEntity.ok(adminService.getAllListings(deleted, archived, status, pageable));
     }
 
     /**

@@ -2,9 +2,13 @@ package com.premisave.listing.service;
 
 import com.premisave.listing.entity.*;
 import com.premisave.listing.enums.ListingStatus;
+import com.premisave.listing.exception.NotFoundException;
 import com.premisave.listing.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,10 +30,20 @@ public class AdminService {
     // ====================== READ ======================
 
     /**
-     * Get all listings with optional filters.
+     * Get all listings with optional filters, paginated.
      * Admin sees everything — deleted, archived, pending, active.
+     *
+     * STOPGAP, NOT A FULL FIX: this still loads all five collections in
+     * full via findAll() and filters/pages in memory — it bounds what goes
+     * back to the client, but not the query cost against MongoDB. The real
+     * fix is collapsing the five per-category collections into one
+     * `listings` collection with a category discriminator, which wasn't
+     * available to do safely in this pass (it touches ListingService,
+     * which wasn't provided). Don't treat this as solving the underlying
+     * scalability issue — it only stops shipping the entire dataset over
+     * the wire.
      */
-    public List<Object> getAllListings(Boolean deleted, Boolean archived, ListingStatus status) {
+    public Page<Object> getAllListings(Boolean deleted, Boolean archived, ListingStatus status, Pageable pageable) {
         List<Object> allListings = new ArrayList<>();
         allListings.addAll(shortTermRentalRepository.findAll());
         allListings.addAll(longTermRentalRepository.findAll());
@@ -37,7 +51,7 @@ public class AdminService {
         allListings.addAll(landSaleRepository.findAll());
         allListings.addAll(leaseRepository.findAll());
 
-        return allListings.stream()
+        List<Object> filtered = allListings.stream()
                 .filter(obj -> obj instanceof Listing)
                 .map(obj -> (Listing) obj)
                 .filter(l -> deleted == null || l.isDeleted() == deleted)
@@ -45,6 +59,13 @@ public class AdminService {
                 .filter(l -> status == null || l.getStatus() == status)
                 .map(l -> (Object) l)
                 .toList();
+
+        int start = (int) pageable.getOffset();
+        if (start >= filtered.size()) {
+            return new PageImpl<>(List.of(), pageable, filtered.size());
+        }
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(new ArrayList<>(filtered.subList(start, end)), pageable, filtered.size());
     }
 
     public Object getListingById(String id) {
@@ -54,7 +75,7 @@ public class AdminService {
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> leaseRepository.findById(id).map(l -> (Object) l))
-                .orElseThrow(() -> new RuntimeException("Listing not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Listing not found with id: " + id));
     }
 
     // ====================== APPROVE / REJECT ======================
@@ -206,7 +227,7 @@ public class AdminService {
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> leaseRepository.findById(id).map(l -> (Object) l))
-                .orElseThrow(() -> new RuntimeException("Listing not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Listing not found with id: " + id));
     }
 
     private void saveListing(Listing listing) {

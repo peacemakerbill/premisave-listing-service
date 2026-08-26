@@ -20,15 +20,10 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                     "/public/**",
-                    "/health",
+                    "/system/health",
+                    "/system/health/details",
                     "/swagger-ui/**",
-                    "/v3/api-docs/**",
-                    // M-Pesa callbacks come from Safaricom servers — exclude from rate limiting
-                    // so retries are never dropped
-                    "/payments/mpesa/callback",
-                    "/payments/mpesa/confirmation",
-                    "/payments/mpesa/validation",
-                    "/payments/mpesa/c2b/status"
+                    "/v3/api-docs/**"
                 );
     }
 }

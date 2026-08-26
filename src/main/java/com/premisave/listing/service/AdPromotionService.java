@@ -8,12 +8,13 @@ import com.premisave.listing.entity.Listing;
 import com.premisave.listing.entity.ListingPromotion;
 import com.premisave.listing.entity.Payment;
 import com.premisave.listing.enums.ListingStatus;
-import com.premisave.listing.enums.PaymentMethod;
 import com.premisave.listing.enums.PaymentStatus;
 import com.premisave.listing.repository.ListingPromotionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,14 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class AdPromotionService {
+
+    /** Reused from property-service's existing convention (see the
+     *  premisave-backend Postman collection) rather than inventing a new
+     *  wallet-service "service" tag — confirm with whoever owns
+     *  wallet-service whether listing promotions and property ad
+     *  subscriptions are meant to share this tag. */
+    private static final String WALLET_SERVICE_TAG = "AD_SUBSCRIPTION";
+    private static final String INITIATED_BY = "LISTING_SERVICE";
 
     private final ListingPromotionRepository promotionRepository;
     private final PaymentService paymentService;
@@ -41,27 +50,26 @@ public class AdPromotionService {
     // ====================== PROMOTE ======================
 
     /**
-     * Promotes a listing for a given number of days.
+     * Promotes a listing for a given number of days, paid for via a
+     * wallet-service debit.
      *
-     * Rules:
-     * 1. Only the listing owner can promote their own listing.
-     * 2. A listing that is already actively promoted cannot be promoted again
-     *    — the owner must use extendPromotion instead.
-     * 3. Payment is processed before the promotion record is written.
-     *    If payment fails, no promotion is created (transactional rollback).
-     * 4. After payment succeeds, the listing is set ACTIVE and visible.
+     * Unlike the old M-Pesa flow, this is synchronous end-to-end: the debit
+     * either succeeds (and the listing is activated in this same call) or
+     * fails (and nothing is activated) — there is no more PENDING-then-
+     * wait-for-callback state, since debiting an existing wallet balance
+     * isn't an async gateway operation the way funding one via M-Pesa was.
+     * The `paymentMethod` parameter this used to take is gone entirely —
+     * wallet-service abstracts the funding method away completely now.
      *
-     * @param request       promotion request (listingId, days, optional custom rate)
-     * @param userId        authenticated user's ID (from JWT)
-     * @param authHeader    full Authorization header for downstream auth service calls
-     * @param paymentMethod chosen payment method
+     * @param request    promotion request (listingId, days, optional custom rate)
+     * @param userId     authenticated user's ID (from JWT)
+     * @param authHeader full Authorization header for the identity check via auth-service
      * @return AdPromotionResponse with promotion details
      */
     @Transactional
     public AdPromotionResponse promoteListing(AdPromotionRequest request,
                                               String userId,
-                                              String authHeader,
-                                              PaymentMethod paymentMethod) {
+                                              String authHeader) {
         // 1. Verify identity
         UserSummaryResponse user = authServiceClient.getCurrentUser(authHeader);
         if (user == null || !user.getId().equals(userId)) {
@@ -93,15 +101,8 @@ public class AdPromotionService {
         BigDecimal effectiveRate = resolveEffectiveRate(request.getCustomDailyRate());
         BigDecimal totalAmount = effectiveRate.multiply(BigDecimal.valueOf(days));
 
-        // 5. Process payment FIRST — if this throws, nothing else is persisted
-        Payment payment = paymentService.processPayment(
-                userId,
-                null,
-                totalAmount,
-                paymentMethod
-        );
-
-        // 6. Build and save promotion record
+        // 5. Create the promotion row first (PENDING) so its id is available
+        //    to use as the wallet-service reference.
         LocalDateTime now = LocalDateTime.now();
         ListingPromotion promotion = new ListingPromotion();
         promotion.setListingId(listing.getId());
@@ -112,35 +113,47 @@ public class AdPromotionService {
         promotion.setCurrency(defaultCurrency);
         promotion.setStartDate(now);
         promotion.setEndDate(now.plusDays(days));
+        promotion.setPaymentStatus(PaymentStatus.PENDING);
+        promotion = promotionRepository.save(promotion);
+
+        // 6. Debit the wallet via wallet-service
+        Payment payment = paymentService.processPayment(
+                userId,
+                promotion.getId(),
+                totalAmount,
+                WALLET_SERVICE_TAG,
+                "Listing promotion: " + days + " day(s) for listing " + listing.getId()
+        );
+
         promotion.setPaymentId(payment.getId());
-        // Status mirrors the payment — PENDING for M-Pesa (confirmed asynchronously),
-        // COMPLETED for synchronous methods.
         promotion.setPaymentStatus(payment.getStatus());
+        promotion = promotionRepository.save(promotion);
 
-        ListingPromotion savedPromotion = promotionRepository.save(promotion);
-
-        // 7. Activate listing only when payment is already confirmed (non-M-Pesa)
-        //    For M-Pesa, activation happens in the M-Pesa callback handler.
+        // 7. Activate the listing immediately if the debit succeeded — no
+        //    more waiting on an async callback.
         if (payment.getStatus() == PaymentStatus.COMPLETED) {
             listing.setPromoted(true);
-            listing.setPromotionEndDate(savedPromotion.getEndDate());
+            listing.setPromotionEndDate(promotion.getEndDate());
             listing.setStatus(ListingStatus.ACTIVE);
             listing.setActive(true);
             listingService.saveListing(listing);
+
+            log.info("Listing {} promoted for {} days by user {} at KES {}/day. Payment: {}, Expires: {}",
+                    listing.getId(), days, userId, effectiveRate, payment.getId(), promotion.getEndDate());
+        } else {
+            log.warn("Listing {} promotion payment failed for user {}: paymentId={}",
+                    listing.getId(), userId, payment.getId());
         }
 
-        log.info("Listing {} promoted for {} days by user {} at KES {}/day. Payment: {}, Expires: {}",
-                listing.getId(), days, userId, effectiveRate, payment.getId(), savedPromotion.getEndDate());
-
         return new AdPromotionResponse(
-                savedPromotion.getId(),
+                promotion.getId(),
                 listing.getId(),
                 days,
                 totalAmount,
-                savedPromotion.getEndDate(),
+                promotion.getEndDate(),
                 payment.getStatus() == PaymentStatus.COMPLETED
                         ? "Promotion activated successfully! Your listing is now live."
-                        : "Payment initiated via M-Pesa. Your listing will go live once payment is confirmed.",
+                        : "Payment failed — your wallet may have insufficient funds. Please top up and try again.",
                 payment.getStatus() == PaymentStatus.COMPLETED
         );
     }
@@ -154,15 +167,15 @@ public class AdPromotionService {
      * 1. Only the listing owner can extend.
      * 2. If promotion is still active, the new days are added to the existing end date.
      * 3. If promotion has expired, it restarts from now.
-     * 4. Payment is processed before the listing is updated.
+     * 4. The wallet debit is processed before the listing is updated, and
+     *    (as above) resolves synchronously — no PaymentMethod parameter
+     *    anymore.
      */
     @Transactional
     public AdPromotionResponse extendPromotion(String listingId,
                                                int additionalDays,
                                                String userId,
-                                               String authHeader,
-                                               PaymentMethod paymentMethod) {
-        // 1. Verify identity
+                                               String authHeader) {
         UserSummaryResponse user = authServiceClient.getCurrentUser(authHeader);
         if (user == null || !user.getId().equals(userId)) {
             throw new RuntimeException("User authentication failed. Please log in again.");
@@ -172,36 +185,21 @@ public class AdPromotionService {
             throw new RuntimeException("You must extend by at least 1 day.");
         }
 
-        // 2. Fetch listing and verify ownership
         Listing listing = (Listing) listingService.getListingById(listingId);
         if (!listing.getOwnerId().equals(userId)) {
             throw new RuntimeException("You can only extend promotion on your own listings.");
         }
 
-        // 3. Resolve effective daily rate
         BigDecimal effectiveRate = resolveEffectiveRate(null);
         BigDecimal totalAmount = effectiveRate.multiply(BigDecimal.valueOf(additionalDays));
 
-        // 4. Process payment FIRST
-        Payment payment = paymentService.processPayment(
-                userId,
-                null,
-                totalAmount,
-                paymentMethod
-        );
-
-        // 5. Determine new end date:
-        //    - If currently promoted and not yet expired → extend from existing end date
-        //    - Otherwise → start fresh from now
         LocalDateTime baseDate = (listing.isPromoted()
                 && listing.getPromotionEndDate() != null
                 && listing.getPromotionEndDate().isAfter(LocalDateTime.now()))
                 ? listing.getPromotionEndDate()
                 : LocalDateTime.now();
-
         LocalDateTime newEndDate = baseDate.plusDays(additionalDays);
 
-        // 6. Record extension as a new promotion entry (preserves history)
         LocalDateTime now = LocalDateTime.now();
         ListingPromotion extension = new ListingPromotion();
         extension.setListingId(listingId);
@@ -212,21 +210,34 @@ public class AdPromotionService {
         extension.setCurrency(defaultCurrency);
         extension.setStartDate(now);
         extension.setEndDate(newEndDate);
+        extension.setPaymentStatus(PaymentStatus.PENDING);
+        extension = promotionRepository.save(extension);
+
+        Payment payment = paymentService.processPayment(
+                userId,
+                extension.getId(),
+                totalAmount,
+                WALLET_SERVICE_TAG,
+                "Listing promotion extension: +" + additionalDays + " day(s) for listing " + listingId
+        );
+
         extension.setPaymentId(payment.getId());
         extension.setPaymentStatus(payment.getStatus());
-        promotionRepository.save(extension);
+        extension = promotionRepository.save(extension);
 
-        // 7. Update listing if payment confirmed
         if (payment.getStatus() == PaymentStatus.COMPLETED) {
             listing.setPromoted(true);
             listing.setPromotionEndDate(newEndDate);
             listing.setStatus(ListingStatus.ACTIVE);
             listing.setActive(true);
             listingService.saveListing(listing);
-        }
 
-        log.info("Promotion extended: listing={}, +{}days, newExpiry={}, user={}, rate=KES{}, payment={}",
-                listingId, additionalDays, newEndDate, userId, effectiveRate, payment.getId());
+            log.info("Promotion extended: listing={}, +{}days, newExpiry={}, user={}, rate=KES{}, payment={}",
+                    listingId, additionalDays, newEndDate, userId, effectiveRate, payment.getId());
+        } else {
+            log.warn("Promotion extension payment failed: listing={}, user={}, paymentId={}",
+                    listingId, userId, payment.getId());
+        }
 
         return new AdPromotionResponse(
                 extension.getId(),
@@ -236,49 +247,17 @@ public class AdPromotionService {
                 newEndDate,
                 payment.getStatus() == PaymentStatus.COMPLETED
                         ? "Promotion extended to " + newEndDate.toLocalDate() + "."
-                        : "Extension payment initiated via M-Pesa. Extension will apply once payment is confirmed.",
+                        : "Payment failed — your wallet may have insufficient funds. Please top up and try again.",
                 payment.getStatus() == PaymentStatus.COMPLETED
         );
-    }
-
-    // ====================== M-PESA CALLBACK ACTIVATION ======================
-
-    /**
-     * Called by PaymentService after an M-Pesa callback confirms a promotion payment.
-     * Activates the listing tied to the promotion whose paymentId matches.
-     */
-    @Transactional
-    public void activatePromotionAfterMpesaPayment(String paymentId) {
-        List<ListingPromotion> promotions = promotionRepository.findByPaymentId(paymentId);
-        if (promotions.isEmpty()) {
-            log.warn("No promotion found for paymentId={}. Listing not activated.", paymentId);
-            return;
-        }
-
-        ListingPromotion promo = promotions.get(0);
-        promo.setPaymentStatus(PaymentStatus.COMPLETED);
-        promotionRepository.save(promo);
-
-        try {
-            Listing listing = (Listing) listingService.getListingById(promo.getListingId());
-            listing.setPromoted(true);
-            listing.setPromotionEndDate(promo.getEndDate());
-            listing.setStatus(ListingStatus.ACTIVE);
-            listing.setActive(true);
-            listingService.saveListing(listing);
-            log.info("Listing {} activated after M-Pesa payment confirmed: paymentId={}",
-                    promo.getListingId(), paymentId);
-        } catch (Exception e) {
-            log.error("Failed to activate listing after M-Pesa callback for paymentId={}: {}",
-                    paymentId, e.getMessage(), e);
-        }
     }
 
     // ====================== SCHEDULED: DEACTIVATE EXPIRED PROMOTIONS ======================
 
     /**
      * Runs every hour. Only queries promotions whose end date has passed —
-     * avoids loading the entire promotions collection.
+     * avoids loading the entire promotions collection. Now backed by a
+     * compound index on (endDate, paymentStatus) — see ListingPromotion.
      */
     @Scheduled(cron = "0 0 * * * *")
     @Transactional
@@ -322,8 +301,10 @@ public class AdPromotionService {
 
     // ====================== QUERIES ======================
 
-    public List<ListingPromotion> getUserPromotions(String ownerId) {
-        return promotionRepository.findByOwnerId(ownerId);
+    /** Paginated — previously returned every promotion a user ever had in
+     *  one unbounded list. */
+    public Page<ListingPromotion> getUserPromotions(String ownerId, Pageable pageable) {
+        return promotionRepository.findByOwnerId(ownerId, pageable);
     }
 
     // ====================== PRIVATE HELPERS ======================

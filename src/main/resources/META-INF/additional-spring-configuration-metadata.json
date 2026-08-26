@@ -6,6 +6,17 @@
       "description": "Base URL of the authentication service."
     },
     {
+      "name": "wallet.service.url",
+      "type": "java.lang.String",
+      "description": "Base URL of the wallet service. All payment execution (M-Pesa, PayPal, Stripe, Flutterwave, NOWPayments) now lives there; this service only calls its internal debit endpoint.",
+      "defaultValue": "http://localhost:8084"
+    },
+    {
+      "name": "wallet.internal.api-key",
+      "type": "java.lang.String",
+      "description": "Static service-to-service API key sent as X-API-Key on calls to wallet-service's /internal/payment endpoint. Must match what wallet-service expects — has no safe default in a real environment."
+    },
+    {
       "name": "jwt.secret",
       "type": "java.lang.String",
       "description": "Base64-encoded secret key used to sign and verify JWT tokens. Must match across all services."
@@ -28,7 +39,7 @@
     {
       "name": "rate-limit.requests-per-minute",
       "type": "java.lang.Integer",
-      "description": "Maximum number of requests allowed per minute per client before rate limiting kicks in.",
+      "description": "Maximum number of requests allowed per minute per user (or per IP if unauthenticated) before rate limiting kicks in. Enforced against a Redis-backed bucket shared across all instances.",
       "defaultValue": 100
     },
     {
@@ -44,58 +55,21 @@
       "defaultValue": "KES"
     },
     {
-      "name": "mpesa.daraja.consumer-key",
-      "type": "java.lang.String",
-      "description": "M-Pesa Daraja API consumer key."
-    },
-    {
-      "name": "mpesa.daraja.consumer-secret",
-      "type": "java.lang.String",
-      "description": "M-Pesa Daraja API consumer secret."
-    },
-    {
-      "name": "mpesa.daraja.shortcode",
-      "type": "java.lang.String",
-      "description": "M-Pesa business shortcode (paybill or till number).",
-      "defaultValue": "174379"
-    },
-    {
-      "name": "mpesa.daraja.passkey",
-      "type": "java.lang.String",
-      "description": "M-Pesa Lipa Na M-Pesa Online passkey used to generate the STK push password."
-    },
-    {
-      "name": "mpesa.daraja.callback-url",
-      "type": "java.lang.String",
-      "description": "Publicly accessible URL that Safaricom will POST STK push payment callbacks to."
-    },
-    {
-      "name": "mpesa.daraja.confirmation-url",
-      "type": "java.lang.String",
-      "description": "Publicly accessible URL for M-Pesa C2B payment confirmation notifications."
-    },
-    {
-      "name": "mpesa.daraja.validation-url",
-      "type": "java.lang.String",
-      "description": "Publicly accessible URL for M-Pesa C2B payment validation requests."
-    },
-    {
-      "name": "mpesa.daraja.environment",
-      "type": "java.lang.String",
-      "description": "Daraja environment to target: 'sandbox' for testing, 'production' for live.",
-      "defaultValue": "sandbox"
-    },
-    {
       "name": "frankfurter.base-url",
       "type": "java.lang.String",
-      "description": "Base URL for the Frankfurter currency exchange rate API.",
+      "description": "Base URL for the Frankfurter currency exchange rate API. Display-only conversion now — actual payment settlement happens in wallet-service.",
       "defaultValue": "https://api.frankfurter.dev"
     },
     {
       "name": "frontend.url",
       "type": "java.lang.String",
-      "description": "Frontend application URL used for CORS allowed-origins configuration.",
+      "description": "Frontend application URL used as the default CORS allowed-origin when cors.allowed-origins is not set.",
       "defaultValue": "http://localhost:3000"
+    },
+    {
+      "name": "cors.allowed-origins",
+      "type": "java.lang.String",
+      "description": "Comma-separated list of allowed CORS origins, e.g. 'https://app.premisave.com,https://admin.premisave.com'. Falls back to frontend.url for single-origin setups."
     }
   ],
   "hints": [

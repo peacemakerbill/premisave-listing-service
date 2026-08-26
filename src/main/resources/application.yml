@@ -2,9 +2,25 @@ spring:
   application:
     name: premisave-listing-service
 
+  # Java 21 virtual threads — cheap mitigation for blocking calls (RestTemplate
+  # to Frankfurter, Feign to auth-service/wallet-service) so they stop pinning
+  # platform threads under load. Does not replace the circuit breakers below —
+  # it just makes blocking cheaper while they're not tripped.
+  threads:
+    virtual:
+      enabled: true
+
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/premisave-listing}
+      # Lets @Indexed / @CompoundIndex annotations actually create indexes on
+      # startup. Fine for dev and for collections that are still small. On an
+      # existing production collection with real data volume, building an
+      # index at startup can stall the app or lock the collection for the
+      # duration — prefer creating those indexes explicitly/out-of-band
+      # (e.g. via a migration script or `db.collection.createIndex` run
+      # ahead of a deploy) once there's real data, and turn this back off.
+      auto-index-creation: true
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -19,6 +35,9 @@ spring:
   cloud:
     discovery:
       enabled: false
+    openfeign:
+      circuitbreaker:
+        enabled: true
 
 # ==================== Server ====================
 server:
@@ -28,6 +47,21 @@ server:
 auth:
   service:
     url: ${AUTH_SERVICE_URL:http://localhost:8080}
+
+# ==================== Wallet Service ====================
+# All payment execution (M-Pesa, PayPal, Stripe, Flutterwave, NOWPayments)
+# now lives entirely in premisave-wallet-service. This service only calls
+# its internal, service-to-service endpoint to debit an existing wallet
+# balance — see WalletServiceClient / WalletApiKeyFeignInterceptor.
+wallet:
+  service:
+    url: ${WALLET_SERVICE_URL:http://localhost:8084}
+  internal:
+    # Static service-to-service credential — NOT the user's JWT. Must match
+    # whatever wallet-service expects on its X-API-Key header for internal
+    # calls. There is no safe default for this in a real environment; the
+    # fallback below is a placeholder only.
+    api-key: ${WALLET_INTERNAL_API_KEY:changeme-set-a-real-key}
 
 # ==================== JWT ====================
 jwt:
@@ -40,6 +74,10 @@ cloudinary:
   api-secret: ${CLOUDINARY_API_SECRET:nAsBdgfXx86u7-Y8X2VnLa-2FbQ}
 
 # ==================== Rate Limiting ====================
+# Per-key (user, falling back to IP) limit, enforced against a Redis-backed
+# bucket so every instance agrees on the same count. See RateLimiterConfig /
+# RateLimiterInterceptor — this used to be a single bucket shared by every
+# user on the instance.
 rate-limit:
   requests-per-minute: 100
 
@@ -49,35 +87,43 @@ ad:
     daily-rate: 299
     default-currency: KES
 
-# ====================== M-PESA DARAJA CONFIG ======================
-# IMPORTANT: The *-url values below MUST be publicly reachable by Safaricom.
-# localhost will NOT work in any deployed environment.
-# Always set MPESA_CALLBACK_URL, MPESA_CONFIRMATION_URL, and MPESA_VALIDATION_URL
-# as environment variables pointing to your live/ngrok/tunnel URL before testing.
-#
-# Example (ngrok for local dev):
-#   MPESA_CALLBACK_URL=https://abc123.ngrok.io/payments/mpesa/callback
-#
-# Example (production):
-#   MPESA_CALLBACK_URL=https://api.premisave.com/payments/mpesa/callback
-mpesa:
-  daraja:
-    consumer-key: ${MPESA_CONSUMER_KEY:your_consumer_key_here}
-    consumer-secret: ${MPESA_CONSUMER_SECRET:your_consumer_secret_here}
-    shortcode: ${MPESA_SHORTCODE:174379}
-    passkey: ${MPESA_PASSKEY:your_passkey_here}
-    callback-url: ${MPESA_CALLBACK_URL:https://your-public-domain.com/payments/mpesa/callback}
-    confirmation-url: ${MPESA_CONFIRMATION_URL:https://your-public-domain.com/payments/mpesa/confirmation}
-    validation-url: ${MPESA_VALIDATION_URL:https://your-public-domain.com/payments/mpesa/validation}
-    environment: ${MPESA_ENV:sandbox}
-
 # ====================== FRANKFURTER CURRENCY API ======================
+# Display-only currency conversion for browsing listings. Actual payment
+# settlement is handled by wallet-service, which has its own FX layer.
 frankfurter:
   base-url: ${FRANKFURTER_BASE_URL:https://api.frankfurter.dev}
 
-# ==================== Frontend ====================
+# ==================== Frontend / CORS ====================
 frontend:
   url: ${FRONTEND_URL:http://localhost:3000}
+
+cors:
+  # Comma-separated list of allowed origins, e.g.
+  # "https://app.premisave.com,https://admin.premisave.com". Falls back to
+  # frontend.url above when unset (single-origin dev/local setups).
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:${frontend.url:http://localhost:3000}}
+
+# ==================== Resilience4j (Feign: auth-service, wallet-service) ====================
+# Applied via the "default" config to every circuit breaker/time limiter
+# Spring Cloud OpenFeign creates per Feign client method — per-client tuning
+# (e.g. a stricter threshold specifically for wallet-service) needs the
+# actual generated instance names confirmed first (visible via the
+# /actuator/health group once Actuator is added, or via DEBUG logging on
+# io.github.resilience4j); left at sane shared defaults here rather than
+# guessing at names that might not match and silently not apply.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 5
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 5s
 
 # ==================== Logging ====================
 logging:

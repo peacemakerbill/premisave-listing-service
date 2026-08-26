@@ -4,6 +4,7 @@ import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
@@ -21,6 +22,7 @@ public abstract class BaseEntity {
     private LocalDateTime updatedAt;
 
     @Field("active")
+    @Indexed
     private boolean active = true;
 
     @Field("archived")
@@ -28,6 +30,7 @@ public abstract class BaseEntity {
 
     // Soft delete — record stays in DB but is invisible to users
     @Field("deleted")
+    @Indexed
     private boolean deleted = false;
 
     @Field("deleted_at")

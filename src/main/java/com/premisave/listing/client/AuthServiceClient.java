@@ -10,7 +10,8 @@ import java.util.List;
 @FeignClient(
     name = "auth-service",
     url = "${auth.service.url:http://localhost:8080}",
-    configuration = FeignConfig.class
+    configuration = FeignConfig.class,
+    fallback = AuthServiceClientFallback.class
 )
 public interface AuthServiceClient {
 

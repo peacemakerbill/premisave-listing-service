@@ -12,6 +12,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -22,11 +23,14 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
+    private final CorsConfigurationSource corsConfigurationSource;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          CorsConfigurationSource corsConfigurationSource) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.objectMapper = objectMapper;
+        this.corsConfigurationSource = corsConfigurationSource;
     }
 
     /**
@@ -71,15 +75,19 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(cors -> cors.configure(http))
+            .cors(cors -> cors.configurationSource(corsConfigurationSource))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/public/**", "/health", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                // M-Pesa callbacks are called by Safaricom — no JWT, must be public
+                // NOTE: SystemController actually maps to /system/health and
+                // /system/health/details (it's @RequestMapping("/system")) —
+                // the previous permitAll list had a bare "/health" entry that
+                // never matched the real path, meaning health checks were
+                // silently requiring a JWT. Fixed below.
                 .requestMatchers(
-                    "/payments/mpesa/callback",
-                    "/payments/mpesa/confirmation",
-                    "/payments/mpesa/validation",
-                    "/payments/mpesa/c2b/status"
+                        "/public/**",
+                        "/system/health",
+                        "/system/health/details",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**"
                 ).permitAll()
                 .requestMatchers("/admin/**").hasAnyRole("ADMIN", "FINANCE")
                 .anyRequest().authenticated()
