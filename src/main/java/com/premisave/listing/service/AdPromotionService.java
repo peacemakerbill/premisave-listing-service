@@ -10,6 +10,7 @@ import com.premisave.listing.entity.Payment;
 import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.enums.PaymentStatus;
 import com.premisave.listing.exception.AuthenticationFailedException;
+import com.premisave.listing.exception.WalletServiceUnavailableException;
 import com.premisave.listing.repository.ListingPromotionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -117,13 +118,25 @@ public class AdPromotionService {
         promotion = promotionRepository.save(promotion);
 
         // 6. Debit the wallet via wallet-service
-        Payment payment = paymentService.processPayment(
-                userId,
-                promotion.getId(),
-                totalAmount,
-                WALLET_SERVICE_TAG,
-                "Listing promotion: " + days + " day(s) for listing " + listing.getId()
-        );
+        Payment payment;
+        try {
+            payment = paymentService.processPayment(
+                    userId,
+                    promotion.getId(),
+                    totalAmount,
+                    WALLET_SERVICE_TAG,
+                    "Listing promotion: " + days + " day(s) for listing " + listing.getId()
+            );
+        } catch (WalletServiceUnavailableException e) {
+            // wallet-service itself is unreachable — mark this attempt
+            // FAILED so the promotion row doesn't sit as PENDING forever,
+            // then propagate so the caller gets the correct "service
+            // unavailable" message instead of one implying insufficient
+            // funds.
+            promotion.setPaymentStatus(PaymentStatus.FAILED);
+            promotionRepository.save(promotion);
+            throw e;
+        }
 
         promotion.setPaymentId(payment.getId());
         promotion.setPaymentStatus(payment.getStatus());
@@ -213,13 +226,20 @@ public class AdPromotionService {
         extension.setPaymentStatus(PaymentStatus.PENDING);
         extension = promotionRepository.save(extension);
 
-        Payment payment = paymentService.processPayment(
-                userId,
-                extension.getId(),
-                totalAmount,
-                WALLET_SERVICE_TAG,
-                "Listing promotion extension: +" + additionalDays + " day(s) for listing " + listingId
-        );
+        Payment payment;
+        try {
+            payment = paymentService.processPayment(
+                    userId,
+                    extension.getId(),
+                    totalAmount,
+                    WALLET_SERVICE_TAG,
+                    "Listing promotion extension: +" + additionalDays + " day(s) for listing " + listingId
+            );
+        } catch (WalletServiceUnavailableException e) {
+            extension.setPaymentStatus(PaymentStatus.FAILED);
+            promotionRepository.save(extension);
+            throw e;
+        }
 
         extension.setPaymentId(payment.getId());
         extension.setPaymentStatus(payment.getStatus());

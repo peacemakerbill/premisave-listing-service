@@ -1,6 +1,6 @@
 package com.premisave.listing.client;
 
-import com.premisave.listing.dto.wallet_service.WalletPaymentResponse;
+import com.premisave.listing.exception.WalletServiceUnavailableException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
@@ -12,10 +12,15 @@ import org.springframework.stereotype.Component;
  * AuthServiceClientFallbackFactory, applied here because a payment failure
  * is exactly the kind of thing worth diagnosing precisely.
  *
- * Fails closed: if wallet-service is unreachable for any reason, no
- * payment is ever reported as successful — PaymentService treats this as a
- * failed charge, and AdPromotionService never activates a listing on the
- * strength of an unconfirmed debit.
+ * Throws WalletServiceUnavailableException rather than returning a graceful
+ * "failed" WalletPaymentResponse: a graceful response with success=false
+ * was indistinguishable from wallet-service genuinely declining the debit
+ * (e.g. insufficient funds), so AdPromotionService ended up telling users
+ * "your wallet may have insufficient funds, please top up" even when the
+ * real problem was wallet-service being unreachable — misleading, since
+ * topping up wouldn't fix that. PaymentService catches this specific
+ * exception, still records the attempt as FAILED for the audit trail, then
+ * re-throws so the caller gets the correct "service unavailable" signal.
  */
 @Slf4j
 @Component
@@ -27,11 +32,8 @@ public class WalletServiceClientFallbackFactory implements FallbackFactory<Walle
             log.warn("wallet-service call failed, using fallback: debitForService(reference={}) — {}: {}",
                     request.getReference(), cause.getClass().getSimpleName(), cause.getMessage());
 
-            WalletPaymentResponse response = new WalletPaymentResponse();
-            response.setSuccess(false);
-            response.setStatus("SERVICE_UNAVAILABLE");
-            response.setMessage("Payments are temporarily unavailable. Please try again shortly.");
-            return response;
+            throw new WalletServiceUnavailableException(
+                    "Payments are temporarily unavailable. Please try again shortly.");
         };
     }
 }

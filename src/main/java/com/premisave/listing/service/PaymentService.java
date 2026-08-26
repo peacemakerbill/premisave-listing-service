@@ -6,6 +6,7 @@ import com.premisave.listing.dto.wallet_service.WalletPaymentResponse;
 import com.premisave.listing.entity.Payment;
 import com.premisave.listing.enums.PaymentStatus;
 import com.premisave.listing.exception.NotFoundException;
+import com.premisave.listing.exception.WalletServiceUnavailableException;
 import com.premisave.listing.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -112,6 +113,19 @@ public class PaymentService {
                 log.warn("Wallet debit failed: userId={}, amountKes={}, reference={}, reason={}",
                         userId, amountKes, reference, reason);
             }
+        } catch (WalletServiceUnavailableException e) {
+            // Distinct from a normal failed debit (e.g. insufficient
+            // funds): wallet-service itself couldn't be reached. Still
+            // record the attempt as FAILED for the audit trail, but
+            // propagate the exception (rather than swallowing it like the
+            // generic catch below) so the caller gets an accurate "service
+            // unavailable" message instead of one implying the wallet
+            // itself is the problem.
+            payment.setStatus(PaymentStatus.FAILED);
+            paymentRepository.save(payment);
+            log.warn("Wallet debit failed — service unavailable: userId={}, reference={}, reason={}",
+                    userId, reference, e.getMessage());
+            throw e;
         } catch (Exception e) {
             payment.setStatus(PaymentStatus.FAILED);
             log.error("Wallet debit call errored: userId={}, reference={}, error={}: {}",

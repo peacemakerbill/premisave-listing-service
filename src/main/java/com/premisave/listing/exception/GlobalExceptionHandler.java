@@ -129,6 +129,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * auth-service itself is unreachable — distinct from
+     * AuthenticationFailedException above, which means auth-service
+     * responded and said no valid user exists for the token. Mapped to 503
+     * rather than 401: telling a caller to "log in again" when the real
+     * problem is a downstream dependency being down is misleading, since
+     * re-authenticating wouldn't fix anything.
+     */
+    @ExceptionHandler(AuthServiceUnavailableException.class)
+    public ResponseEntity<ApiResponse<String>> handleAuthServiceUnavailableException(AuthServiceUnavailableException ex) {
+        log.warn("Auth service unavailable: {}", ex.getMessage());
+        ApiResponse<String> response = new ApiResponse<>(false, ex.getMessage(), null);
+        return new ResponseEntity<>(response, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /**
      * Handle Access Denied (403) - When user doesn't have required role (ADMIN/FINANCE)
      */
     @ExceptionHandler(AccessDeniedException.class)
@@ -162,6 +177,21 @@ public class GlobalExceptionHandler {
             "A required service is temporarily unavailable. Please try again shortly.",
             null
         );
+        return new ResponseEntity<>(response, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /**
+     * wallet-service itself is unreachable — distinct from a genuine
+     * payment failure (e.g. insufficient funds), which comes back as a
+     * normal PaymentStatus.FAILED rather than this exception. Telling a
+     * caller their wallet may be low on funds when the real problem is a
+     * downstream dependency being down is misleading, since topping up
+     * wouldn't fix that.
+     */
+    @ExceptionHandler(WalletServiceUnavailableException.class)
+    public ResponseEntity<ApiResponse<String>> handleWalletServiceUnavailableException(WalletServiceUnavailableException ex) {
+        log.warn("Wallet service unavailable: {}", ex.getMessage());
+        ApiResponse<String> response = new ApiResponse<>(false, ex.getMessage(), null);
         return new ResponseEntity<>(response, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
