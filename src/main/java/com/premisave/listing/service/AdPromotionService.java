@@ -9,6 +9,7 @@ import com.premisave.listing.entity.ListingPromotion;
 import com.premisave.listing.entity.Payment;
 import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.enums.PaymentStatus;
+import com.premisave.listing.exception.AuthenticationFailedException;
 import com.premisave.listing.repository.ListingPromotionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,7 +73,7 @@ public class AdPromotionService {
         // 1. Verify identity
         UserSummaryResponse user = authServiceClient.getCurrentUser(authHeader);
         if (user == null || !user.getId().equals(userId)) {
-            throw new RuntimeException("User authentication failed. Please log in again.");
+            throw new AuthenticationFailedException("User authentication failed. Please log in again.");
         }
 
         // 2. Fetch listing and verify ownership
@@ -177,7 +178,7 @@ public class AdPromotionService {
                                                String authHeader) {
         UserSummaryResponse user = authServiceClient.getCurrentUser(authHeader);
         if (user == null || !user.getId().equals(userId)) {
-            throw new RuntimeException("User authentication failed. Please log in again.");
+            throw new AuthenticationFailedException("User authentication failed. Please log in again.");
         }
 
         if (additionalDays < 1) {

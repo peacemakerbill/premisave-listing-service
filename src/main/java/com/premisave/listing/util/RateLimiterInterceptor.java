@@ -1,8 +1,6 @@
 package com.premisave.listing.util;
 
-import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.BucketConfiguration;
-import io.github.bucket4j.Refill;
 import io.github.bucket4j.distributed.BucketProxy;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,9 +32,9 @@ public class RateLimiterInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String key = resolveRateLimitKey(request);
 
-        @SuppressWarnings("deprecation")
-		Supplier<BucketConfiguration> configSupplier = () -> BucketConfiguration.builder()
-                .addLimit(Bandwidth.classic(requestsPerMinute, Refill.intervally(requestsPerMinute, Duration.ofMinutes(1))))
+        Supplier<BucketConfiguration> configSupplier = () -> BucketConfiguration.builder()
+                .addLimit(limit -> limit.capacity(requestsPerMinute)
+                        .refillIntervally(requestsPerMinute, Duration.ofMinutes(1)))
                 .build();
 
         BucketProxy bucket = proxyManager.builder().build(key, configSupplier);
@@ -53,10 +51,13 @@ public class RateLimiterInterceptor implements HandlerInterceptor {
 
     /**
      * Rate-limits per authenticated user where possible, falling back to
-     * per-IP for unauthenticated requests. Replaces the old design where
-     * every caller on the instance shared one bucket, so a single busy user
-     * (or a scraper) could exhaust the whole instance's budget for everyone
-     * else.
+     * per-IP for unauthenticated requests. Keys are namespaced under
+     * "ratelimit:" specifically so they can never collide with keys used
+     * by anything else sharing this Redis instance (another service, a
+     * cache, leftover test data) — a bare "user:<id>" key is exactly the
+     * kind of generic name something else might already own, and reading
+     * back non-Bucket4j data as bucket state throws
+     * UsageOfUnsupportedApiException.
      *
      * NOTE: getRemoteAddr() reflects the direct TCP peer, which is your load
      * balancer/reverse proxy if you're behind one. If so, resolve the real
@@ -70,12 +71,12 @@ public class RateLimiterInterceptor implements HandlerInterceptor {
             try {
                 String userId = jwtUtil.extractUserId(authHeader);
                 if (userId != null && !userId.isBlank()) {
-                    return "user:" + userId;
+                    return "ratelimit:user:" + userId;
                 }
             } catch (Exception e) {
                 log.debug("Could not extract userId for rate limiting, falling back to IP: {}", e.getMessage());
             }
         }
-        return "ip:" + request.getRemoteAddr();
+        return "ratelimit:ip:" + request.getRemoteAddr();
     }
 }

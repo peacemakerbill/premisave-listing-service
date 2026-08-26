@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
     name = "wallet-service",
     url = "${wallet.service.url:http://localhost:8084}",
     configuration = WalletFeignConfig.class,
-    fallback = WalletServiceClientFallback.class
+    fallbackFactory = WalletServiceClientFallbackFactory.class
 )
 public interface WalletServiceClient {
 
