@@ -1,6 +1,5 @@
 package com.premisave.listing.entity;
 
-import com.premisave.listing.enums.PaymentMethod;
 import com.premisave.listing.enums.PaymentStatus;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -38,18 +37,6 @@ public class Payment extends BaseEntity {
     private BigDecimal exchangeRate;
 
     // ====================== PAYMENT DETAILS ======================
-
-    /**
-     * @deprecated Payment provider/method is now entirely wallet-service's
-     * concern — it may fund a wallet via M-Pesa, PayPal, Flutterwave,
-     * Stripe, or NOWPayments, but listing-service only ever asks it to debit
-     * an existing balance and no longer knows or needs to know how that
-     * wallet was funded. Left on the entity (nullable, unset by new code)
-     * rather than removed, since existing stored documents may have a value
-     * here.
-     */
-    @Deprecated
-    private PaymentMethod method;
 
     private PaymentStatus status = PaymentStatus.PENDING;
 

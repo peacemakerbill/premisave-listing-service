@@ -34,7 +34,6 @@ public class AdPromotionService {
      *  wallet-service whether listing promotions and property ad
      *  subscriptions are meant to share this tag. */
     private static final String WALLET_SERVICE_TAG = "AD_SUBSCRIPTION";
-    private static final String INITIATED_BY = "LISTING_SERVICE";
 
     private final ListingPromotionRepository promotionRepository;
     private final PaymentService paymentService;

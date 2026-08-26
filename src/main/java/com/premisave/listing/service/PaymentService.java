@@ -36,6 +36,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PaymentService {
 
+    private static final String INITIATED_BY = "LISTING_SERVICE";
+
     private final PaymentRepository paymentRepository;
     private final WalletServiceClient walletServiceClient;
 
@@ -94,7 +96,7 @@ public class PaymentService {
         payment = paymentRepository.save(payment);
 
         WalletInternalPaymentRequest request = new WalletInternalPaymentRequest(
-                userId, amountKes, service, description, "LISTING_SERVICE", reference);
+                userId, amountKes, service, description, INITIATED_BY, reference);
 
         try {
             WalletPaymentResponse response = walletServiceClient.debitForService(request);
