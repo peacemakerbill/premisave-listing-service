@@ -64,7 +64,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception e) {
-            log.error("Error processing JWT token", e);
+            // Message only, no trailing throwable — this is a defensive
+            // backstop (JwtService's own methods already catch their own
+            // failures internally and return false/null), so if this ever
+            // fires it's worth knowing about, but not worth a full stack
+            // trace on every occurrence.
+            log.error("Error processing JWT token: {} — {}", e.getClass().getSimpleName(), e.getMessage());
         }
 
         filterChain.doFilter(request, response);

@@ -5,6 +5,7 @@ import com.premisave.listing.security.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -88,6 +89,14 @@ public class SecurityConfig {
                         "/system/health/details",
                         "/swagger-ui/**",
                         "/v3/api-docs/**"
+                ).permitAll()
+
+                .requestMatchers(HttpMethod.GET, "/listings/me").authenticated()
+                .requestMatchers(HttpMethod.GET,
+                        "/listings/search",
+                        "/listings/short-term",
+                        "/listings/owner/**",
+                        "/listings/{id}"
                 ).permitAll()
                 .requestMatchers("/admin/**").hasAnyRole("ADMIN", "FINANCE")
                 .anyRequest().authenticated()
