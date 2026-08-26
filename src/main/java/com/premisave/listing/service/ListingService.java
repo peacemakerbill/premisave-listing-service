@@ -10,11 +10,14 @@ import com.premisave.listing.dto.auth_service.UserSummaryResponse;
 import com.premisave.listing.entity.*;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
+import com.premisave.listing.exception.AuthenticationFailedException;
+import com.premisave.listing.exception.NotFoundException;
 import com.premisave.listing.repository.*;
 import com.premisave.listing.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,63 +50,74 @@ public class ListingService {
 
     // ====================== CREATE ======================
 
+    /**
+     * NOTE: this used to wrap its entire body in try/catch(Exception e),
+     * log the exception with a trailing throwable (printing a full stack
+     * trace on every failure, including routine ones like "auth-service is
+     * down"), and re-wrap EVERY failure into a generic RuntimeException
+     * with a "Failed to create listing: " prefix. That discarded the real
+     * exception type before it ever reached GlobalExceptionHandler — so an
+     * auth failure, a permissions failure, and a genuine bug all looked
+     * identical: a 400 with a stack trace. Removed entirely: every
+     * exception this method can throw (AuthenticationFailedException,
+     * AccessDeniedException, IllegalArgumentException, a Mongo hiccup) now
+     * has its own correct, quietly-logged handler in GlobalExceptionHandler
+     * — there's nothing left for a local catch to usefully add.
+     */
     @Transactional
     public ListingResponse createListing(ListingRequest request, String authorizationHeader) {
-        try {
-            UserSummaryResponse user = authServiceClient.getCurrentUser(authorizationHeader);
-            if (user == null || user.getId() == null) {
-                throw new RuntimeException("User authentication failed. Please login again.");
-            }
-
-            // ====================== ROLE CHECK ======================
-            // Extract the raw token (strip "Bearer " prefix if present)
-            String token = authorizationHeader;
-            if (token != null && token.startsWith("Bearer ")) {
-                token = token.substring(7);
-            }
-            String role = jwtService.extractRole(token);
-            if (!"HOME_OWNER".equals(role)) {
-                throw new RuntimeException(
-                    "Access denied: only HOME_OWNER accounts can create listings. " +
-                    "Your current role is: " + (role != null ? role : "unknown")
-                );
-            }
-            // ========================================================
-
-            if (request.getImageUrls() == null) {
-                request.setImageUrls(new ArrayList<>());
-            }
-
-            Listing listing = createSpecificListing(request);
-
-            listing.setOwnerId(user.getId());
-            listing.setTitle(request.getTitle());
-            listing.setDescription(request.getDescription());
-            listing.setCategory(request.getCategory());
-            listing.setPrice(request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO);
-            listing.setLatitude(request.getLatitude());
-            listing.setLongitude(request.getLongitude());
-            listing.setAddress(request.getAddress());
-            listing.setCity(request.getCity());
-            listing.setCountry(request.getCountry() != null ? request.getCountry() : "Kenya");
-            listing.setMainImageUrl(request.getMainImageUrl());
-            listing.setImageUrls(request.getImageUrls());
-
-            // Listings start as PENDING and inactive — they only become visible
-            // once the owner promotes them and the payment is confirmed.
-            listing.setStatus(ListingStatus.PENDING);
-            listing.setActive(false);
-
-            listing = saveListing(listing);
-
-            log.info("New listing created (PENDING) by HOME_OWNER={}: listingId={}", user.getId(), listing.getId());
-
-            return new ListingResponse("Listing created successfully. Promote it to make it visible to customers.", listing.getId(), listing.getTitle(), true);
-
-        } catch (Exception e) {
-            log.error("Error while creating listing", e);
-            throw new RuntimeException("Failed to create listing: " + e.getMessage(), e);
+        UserSummaryResponse user = authServiceClient.getCurrentUser(authorizationHeader);
+        if (user == null || user.getId() == null) {
+            throw new AuthenticationFailedException("User authentication failed. Please login again.");
         }
+
+        // ====================== ROLE CHECK ======================
+        // Extract the raw token (strip "Bearer " prefix if present)
+        String token = authorizationHeader;
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
+        String role = jwtService.extractRole(token);
+        if (!"HOME_OWNER".equals(role)) {
+            // This is a permissions failure, not a generic domain error —
+            // AccessDeniedException gets a clean 403 from
+            // GlobalExceptionHandler instead of a 400.
+            throw new AccessDeniedException(
+                "Access denied: only HOME_OWNER accounts can create listings. " +
+                "Your current role is: " + (role != null ? role : "unknown")
+            );
+        }
+        // ========================================================
+
+        if (request.getImageUrls() == null) {
+            request.setImageUrls(new ArrayList<>());
+        }
+
+        Listing listing = createSpecificListing(request);
+
+        listing.setOwnerId(user.getId());
+        listing.setTitle(request.getTitle());
+        listing.setDescription(request.getDescription());
+        listing.setCategory(request.getCategory());
+        listing.setPrice(request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO);
+        listing.setLatitude(request.getLatitude());
+        listing.setLongitude(request.getLongitude());
+        listing.setAddress(request.getAddress());
+        listing.setCity(request.getCity());
+        listing.setCountry(request.getCountry() != null ? request.getCountry() : "Kenya");
+        listing.setMainImageUrl(request.getMainImageUrl());
+        listing.setImageUrls(request.getImageUrls());
+
+        // Listings start as PENDING and inactive — they only become visible
+        // once the owner promotes them and the payment is confirmed.
+        listing.setStatus(ListingStatus.PENDING);
+        listing.setActive(false);
+
+        listing = saveListing(listing);
+
+        log.info("New listing created (PENDING) by HOME_OWNER={}: listingId={}", user.getId(), listing.getId());
+
+        return new ListingResponse("Listing created successfully. Promote it to make it visible to customers.", listing.getId(), listing.getTitle(), true);
     }
 
     private Listing createSpecificListing(ListingRequest request) {
@@ -165,42 +179,42 @@ public class ListingService {
 
     // ====================== UPDATE ======================
 
+    /** Same fix as createListing — try/catch(Exception) that logged with a
+     *  trailing throwable and re-wrapped everything into a generic
+     *  RuntimeException removed; ownership check now throws
+     *  AccessDeniedException (403) instead of a generic RuntimeException
+     *  (400). */
     @Transactional
     public ListingResponse updateListing(String id, ListingUpdateRequest request, String userId) {
-        try {
-            Listing existing = (Listing) getListingById(id);
-            if (!existing.getOwnerId().equals(userId)) {
-                throw new RuntimeException("You can only update your own listings");
-            }
-
-            if (request.getTitle() != null) existing.setTitle(request.getTitle());
-            if (request.getDescription() != null) existing.setDescription(request.getDescription());
-            if (request.getPrice() != null) existing.setPrice(request.getPrice());
-            if (request.getLatitude() != null) existing.setLatitude(request.getLatitude());
-            if (request.getLongitude() != null) existing.setLongitude(request.getLongitude());
-            if (request.getAddress() != null) existing.setAddress(request.getAddress());
-            if (request.getCity() != null) existing.setCity(request.getCity());
-            if (request.getCountry() != null) existing.setCountry(request.getCountry());
-            if (request.getCategory() != null) existing.setCategory(request.getCategory());
-
-            if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
-                existing.setMainImageUrl(request.getMainImageUrl());
-            }
-
-            if (request.getImageUrls() != null) {
-                existing.setImageUrls(request.getImageUrls());
-            }
-
-            updateSpecificFields(existing, request);
-            Listing saved = saveListing(existing);
-
-            log.info("Listing updated: {} by user {}", saved.getId(), userId);
-
-            return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
-        } catch (Exception e) {
-            log.error("Error updating listing {}", id, e);
-            throw new RuntimeException("Failed to update listing: " + e.getMessage(), e);
+        Listing existing = (Listing) getListingById(id);
+        if (!existing.getOwnerId().equals(userId)) {
+            throw new AccessDeniedException("You can only update your own listings");
         }
+
+        if (request.getTitle() != null) existing.setTitle(request.getTitle());
+        if (request.getDescription() != null) existing.setDescription(request.getDescription());
+        if (request.getPrice() != null) existing.setPrice(request.getPrice());
+        if (request.getLatitude() != null) existing.setLatitude(request.getLatitude());
+        if (request.getLongitude() != null) existing.setLongitude(request.getLongitude());
+        if (request.getAddress() != null) existing.setAddress(request.getAddress());
+        if (request.getCity() != null) existing.setCity(request.getCity());
+        if (request.getCountry() != null) existing.setCountry(request.getCountry());
+        if (request.getCategory() != null) existing.setCategory(request.getCategory());
+
+        if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
+            existing.setMainImageUrl(request.getMainImageUrl());
+        }
+
+        if (request.getImageUrls() != null) {
+            existing.setImageUrls(request.getImageUrls());
+        }
+
+        updateSpecificFields(existing, request);
+        Listing saved = saveListing(existing);
+
+        log.info("Listing updated: {} by user {}", saved.getId(), userId);
+
+        return new ListingResponse("Listing updated successfully", saved.getId(), saved.getTitle(), true);
     }
 
     // ====================== SAVE ======================
@@ -232,7 +246,9 @@ public class ListingService {
             log.info("Image uploaded successfully: {}", url);
             return url;
         } catch (Exception e) {
-            log.error("Cloudinary upload failed for file: {}", file.getOriginalFilename(), e);
+            // Message only — no trailing throwable, so no stack trace.
+            log.error("Cloudinary upload failed for file {}: {} — {}",
+                    file.getOriginalFilename(), e.getClass().getSimpleName(), e.getMessage());
             throw new RuntimeException("Image upload failed: " + e.getMessage());
         }
     }
@@ -256,6 +272,9 @@ public class ListingService {
 
     // ====================== GET ======================
 
+    /** Not-found now maps to a proper 404 via NotFoundException, instead of
+     *  a generic RuntimeException (400) — consistent with AdminService's
+     *  identical lookup. */
     public Object getListingById(String id) {
         return shortTermRentalRepository.findById(id)
                 .map(l -> (Object) l)
@@ -263,7 +282,7 @@ public class ListingService {
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> leaseRepository.findById(id).map(l -> (Object) l))
-                .orElseThrow(() -> new RuntimeException("Listing not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Listing not found with id: " + id));
     }
 
     // ====================== UPDATE SPECIFIC FIELDS ======================
@@ -315,11 +334,15 @@ public class ListingService {
 
     // ====================== DELETE ======================
 
+    /** Ownership checks below now throw AccessDeniedException (403)
+     *  instead of a generic RuntimeException (400) — state-conflict checks
+     *  ("already deleted", "already archived") stay as RuntimeException
+     *  (400), consistent with the equivalent checks in AdminService. */
     @Transactional
     public String deleteListing(String id, String userId) {
         Listing listing = (Listing) getListingById(id);
         if (!listing.getOwnerId().equals(userId)) {
-            throw new RuntimeException("You can only delete your own listings");
+            throw new AccessDeniedException("You can only delete your own listings");
         }
         if (listing.isDeleted()) {
             throw new RuntimeException("Listing has already been deleted");
@@ -335,7 +358,7 @@ public class ListingService {
     public String archiveListing(String id, String userId) {
         Listing listing = (Listing) getListingById(id);
         if (!listing.getOwnerId().equals(userId)) {
-            throw new RuntimeException("You can only archive your own listings");
+            throw new AccessDeniedException("You can only archive your own listings");
         }
         if (listing.isDeleted()) {
             throw new RuntimeException("Listing has been deleted and cannot be archived");
@@ -353,7 +376,7 @@ public class ListingService {
     public String unarchiveListing(String id, String userId) {
         Listing listing = (Listing) getListingById(id);
         if (!listing.getOwnerId().equals(userId)) {
-            throw new RuntimeException("You can only unarchive your own listings");
+            throw new AccessDeniedException("You can only unarchive your own listings");
         }
         if (listing.isDeleted()) {
             throw new RuntimeException("Listing has been deleted and cannot be unarchived");
