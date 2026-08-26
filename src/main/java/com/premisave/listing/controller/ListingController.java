@@ -2,7 +2,6 @@ package com.premisave.listing.controller;
 
 import com.premisave.listing.dto.AdPromotionRequest;
 import com.premisave.listing.dto.AdPromotionResponse;
-import com.premisave.listing.dto.ListingCategoryRequest;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingUpdateRequest;
 import com.premisave.listing.dto.ListingResponse;
@@ -138,14 +137,25 @@ public class ListingController {
         return ResponseEntity.ok(listingService.unarchiveListing(id, userId));
     }
 
+    /**
+     * Filterable by category, city, price range, and free-text query, on
+     * top of the existing status filter — previously this only accepted
+     * status, so checking "my luxury Nairobi listings under 20k" meant
+     * fetching everything and filtering client-side.
+     */
     @GetMapping("/me")
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<List<MyListingResponse>> getMyListings(
             @RequestHeader("Authorization") String authorization,
-            @RequestParam(required = false) ListingStatus status) {
+            @RequestParam(required = false) ListingStatus status,
+            @RequestParam(required = false) ListingCategory category,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) Double minPrice,
+            @RequestParam(required = false) Double maxPrice,
+            @RequestParam(required = false) String query) {
 
         String ownerId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(listingService.getMyListings(ownerId, status));
+        return ResponseEntity.ok(listingService.getMyListings(ownerId, status, category, city, minPrice, maxPrice, query));
     }
 
     // ====================== PROMOTION ======================
@@ -214,13 +224,6 @@ public class ListingController {
         return ResponseEntity.ok(listingService.getShortTermRentals(city));
     }
 
-    @PostMapping("/category")
-    public ResponseEntity<List<?>> getListingsByCategory(
-            @Valid @RequestBody ListingCategoryRequest request) {
-        return ResponseEntity.ok(listingService.getListingsByCategory(
-                request.getCategory(), request.getCity()));
-    }
-
     @GetMapping("/owner/{ownerId}")
     public ResponseEntity<List<?>> getListingsByOwner(
             @PathVariable String ownerId,
@@ -228,6 +231,13 @@ public class ListingController {
         return ResponseEntity.ok(listingService.getListingsByOwner(ownerId, category));
     }
 
+    /**
+     * Filters by any combination of free-text query, category, city, and
+     * price range. Replaces the old separate POST /listings/category
+     * endpoint entirely — that was just this same search with the other
+     * filters left blank, so keeping both was redundant. Only ever returns
+     * publicly visible (promoted, non-expired, non-rejected) listings.
+     */
     @GetMapping("/search")
     public ResponseEntity<List<?>> searchListings(
             @RequestParam(required = false) String query,

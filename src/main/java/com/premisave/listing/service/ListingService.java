@@ -17,6 +17,9 @@ import com.premisave.listing.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -44,6 +48,7 @@ public class ListingService {
     private final AuthServiceClient authServiceClient;
     private final Cloudinary cloudinary;
     private final JwtService jwtService; // for role extraction
+    private final MongoTemplate mongoTemplate;
 
     @Value("${ad.promotion.daily-rate:2.99}")
     private BigDecimal dailyRate;
@@ -431,96 +436,128 @@ public class ListingService {
         };
     }
 
-    public List<?> getListingsByCategory(ListingCategory category, String city) {
-        if (category == null) return List.of();
+    /**
+     * Builds one Mongo Query with whichever of city / price-range /
+     * free-text filters were supplied, applied consistently across every
+     * listing category. Previously, city filtering only worked at the
+     * query level for SHORT_TERM_RENTAL — every other category loaded its
+     * entire collection via findAll() and relied on an in-memory loop to
+     * filter by city (the same inconsistency the earlier LocationService
+     * fix addressed for a different endpoint). This is shared by both
+     * searchListings and getMyListings below.
+     */
+    private Query buildListingQuery(String city, Double minPrice, Double maxPrice, String textQuery) {
+        Query query = new Query();
 
-        List<Object> all = switch (category) {
-            case SHORT_TERM_RENTAL -> {
-                if (city != null && !city.trim().isEmpty()) {
-                    yield new ArrayList<>(shortTermRentalRepository.findByCityAndActiveTrue(city));
-                } else {
-                    yield new ArrayList<>(shortTermRentalRepository.findAll());
-                }
-            }
-            case LONG_TERM_RENTAL -> new ArrayList<>(longTermRentalRepository.findAll());
-            case LAND_SALE        -> new ArrayList<>(landSaleRepository.findAll());
-            case HOUSE_SALE       -> new ArrayList<>(houseSaleRepository.findAll());
-            case LEASE            -> new ArrayList<>(leaseRepository.findAll());
-        };
+        if (city != null && !city.isBlank()) {
+            query.addCriteria(Criteria.where("city").regex(Pattern.quote(city.trim()), "i"));
+        }
 
-        return all.stream()
-                .filter(obj -> obj instanceof Listing l && isListingVisible(l))
-                .toList();
+        if (minPrice != null && maxPrice != null) {
+            query.addCriteria(Criteria.where("price").gte(BigDecimal.valueOf(minPrice)).lte(BigDecimal.valueOf(maxPrice)));
+        } else if (minPrice != null) {
+            query.addCriteria(Criteria.where("price").gte(BigDecimal.valueOf(minPrice)));
+        } else if (maxPrice != null) {
+            query.addCriteria(Criteria.where("price").lte(BigDecimal.valueOf(maxPrice)));
+        }
+
+        if (textQuery != null && !textQuery.isBlank()) {
+            String pattern = Pattern.quote(textQuery.trim());
+            query.addCriteria(new Criteria().orOperator(
+                    Criteria.where("title").regex(pattern, "i"),
+                    Criteria.where("description").regex(pattern, "i")
+            ));
+        }
+
+        return query;
     }
 
-    public List<?> searchListings(String query, ListingCategory category, Double minPrice, Double maxPrice, String city) {
-        List<Object> results = new ArrayList<>();
-
-        List<?> candidates;
+    /** Runs the given query against one category's collection, or all five
+     *  if category is null — one database round trip per category
+     *  involved, instead of loading every category into memory and
+     *  filtering in the JVM. */
+    private List<Object> findAcrossCategories(ListingCategory category, Query query) {
         if (category != null) {
-            candidates = getListingsByCategory(category, city);
-        } else {
-            List<Object> all = new ArrayList<>();
-            all.addAll(shortTermRentalRepository.findAll());
-            all.addAll(longTermRentalRepository.findAll());
-            all.addAll(landSaleRepository.findAll());
-            all.addAll(houseSaleRepository.findAll());
-            all.addAll(leaseRepository.findAll());
-            candidates = all;
+            return findByCategory(category, query);
         }
-
-        for (Object obj : candidates) {
-            if (obj instanceof Listing listing && isListingVisible(listing)) {
-                // Apply text filter
-                if (query != null && !query.isBlank()) {
-                    String q = query.toLowerCase();
-                    boolean titleMatch = listing.getTitle() != null && listing.getTitle().toLowerCase().contains(q);
-                    boolean descMatch  = listing.getDescription() != null && listing.getDescription().toLowerCase().contains(q);
-                    if (!titleMatch && !descMatch) continue;
-                }
-                // Apply price filters
-                if (minPrice != null && listing.getPrice().compareTo(BigDecimal.valueOf(minPrice)) < 0) continue;
-                if (maxPrice != null && listing.getPrice().compareTo(BigDecimal.valueOf(maxPrice)) > 0) continue;
-                // Apply city filter (only when not already filtered at query level)
-                if (city != null && !city.isBlank()) {
-                    if (listing.getCity() == null || !listing.getCity().equalsIgnoreCase(city)) continue;
-                }
-                results.add(listing);
-            }
-        }
+        List<Object> results = new ArrayList<>();
+        results.addAll(mongoTemplate.find(query, ShortTermRental.class));
+        results.addAll(mongoTemplate.find(query, LongTermRental.class));
+        results.addAll(mongoTemplate.find(query, LandSale.class));
+        results.addAll(mongoTemplate.find(query, HouseSale.class));
+        results.addAll(mongoTemplate.find(query, Lease.class));
         return results;
     }
 
+    private List<Object> findByCategory(ListingCategory category, Query query) {
+        return switch (category) {
+            case SHORT_TERM_RENTAL -> new ArrayList<>(mongoTemplate.find(query, ShortTermRental.class));
+            case LONG_TERM_RENTAL  -> new ArrayList<>(mongoTemplate.find(query, LongTermRental.class));
+            case LAND_SALE         -> new ArrayList<>(mongoTemplate.find(query, LandSale.class));
+            case HOUSE_SALE        -> new ArrayList<>(mongoTemplate.find(query, HouseSale.class));
+            case LEASE             -> new ArrayList<>(mongoTemplate.find(query, Lease.class));
+        };
+    }
+
     /**
-     * A listing is visible to the public only when it is promoted with an
-     * active (non-expired) promotion. Deleted, archived, or rejected listings
-     * are never shown regardless of promotion status.
+     * Public listing search. Filters by any combination of free-text query
+     * (title/description, case-insensitive substring), category, city, and
+     * price range. This replaces the old, separate "get listings by
+     * category" endpoint entirely — every one of its use cases is just
+     * this method with category set and everything else left blank, so
+     * keeping both was redundant.
+     *
+     * Always restricted to publicly visible listings (not deleted, not
+     * archived, not rejected, actively promoted) — the same rule
+     * isListingVisible used to apply after loading candidates into memory,
+     * now enforced at the database query level instead.
      */
-    private boolean isListingVisible(Listing listing) {
-        if (listing.isDeleted()) return false;
-        if (listing.isArchived()) return false;
-        if (listing.getStatus() == ListingStatus.REJECTED) return false;
-        return listing.isPromoted()
-                && listing.getPromotionEndDate() != null
-                && listing.getPromotionEndDate().isAfter(LocalDateTime.now());
+    public List<?> searchListings(String query, ListingCategory category, Double minPrice, Double maxPrice, String city) {
+        Query mongoQuery = buildListingQuery(city, minPrice, maxPrice, query);
+        mongoQuery.addCriteria(Criteria.where("deleted").is(false));
+        mongoQuery.addCriteria(Criteria.where("archived").is(false));
+        mongoQuery.addCriteria(Criteria.where("status").ne(ListingStatus.REJECTED));
+        mongoQuery.addCriteria(Criteria.where("isPromoted").is(true));
+        mongoQuery.addCriteria(Criteria.where("promotionEndDate").gt(LocalDateTime.now()));
+
+        return findAcrossCategories(category, mongoQuery);
     }
 
     // ====================== MY LISTINGS ======================
 
-    public List<MyListingResponse> getMyListings(String ownerId, ListingStatus statusFilter) {
+    /**
+     * Filterable by everything searchListings supports (category, city,
+     * price range, free-text query), scoped to the caller's own listings
+     * via ownerId — plus an exact status filter, which searchListings
+     * doesn't have since it only ever shows visible/promoted listings
+     * regardless of status. "My listings" needs to show PENDING/REJECTED/
+     * ACTIVE ones too, since checking on unpromoted listings is the whole
+     * point of this endpoint.
+     */
+    public List<MyListingResponse> getMyListings(
+            String ownerId,
+            ListingStatus statusFilter,
+            ListingCategory category,
+            String city,
+            Double minPrice,
+            Double maxPrice,
+            String query) {
         if (ownerId == null || ownerId.trim().isEmpty()) {
             return List.of();
         }
 
-        List<?> rawListings = getListingsByOwner(ownerId, null);
+        Query mongoQuery = buildListingQuery(city, minPrice, maxPrice, query);
+        mongoQuery.addCriteria(Criteria.where("ownerId").is(ownerId));
+        if (statusFilter != null) {
+            mongoQuery.addCriteria(Criteria.where("status").is(statusFilter));
+        }
+
+        List<Object> rawListings = findAcrossCategories(category, mongoQuery);
         List<MyListingResponse> result = new ArrayList<>();
 
         for (Object obj : rawListings) {
             if (obj instanceof Listing listing) {
-                MyListingResponse response = mapToMyListingResponse(listing);
-                if (statusFilter == null || response.getStatus() == statusFilter) {
-                    result.add(response);
-                }
+                result.add(mapToMyListingResponse(listing));
             }
         }
         return result;
