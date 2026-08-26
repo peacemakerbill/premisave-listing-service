@@ -129,6 +129,6 @@ public class PaymentService {
 
     public Payment getPaymentById(String id) {
         return paymentRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Payment not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Payment not found"));
     }
 }

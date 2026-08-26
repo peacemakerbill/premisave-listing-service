@@ -75,7 +75,7 @@ public class AdminService {
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> leaseRepository.findById(id).map(l -> (Object) l))
-                .orElseThrow(() -> new NotFoundException("Listing not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Listing not found"));
     }
 
     // ====================== APPROVE / REJECT ======================
@@ -227,7 +227,7 @@ public class AdminService {
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> leaseRepository.findById(id).map(l -> (Object) l))
-                .orElseThrow(() -> new NotFoundException("Listing not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Listing not found"));
     }
 
     private void saveListing(Listing listing) {

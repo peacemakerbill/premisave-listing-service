@@ -282,7 +282,7 @@ public class ListingService {
                 .or(() -> landSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> houseSaleRepository.findById(id).map(l -> (Object) l))
                 .or(() -> leaseRepository.findById(id).map(l -> (Object) l))
-                .orElseThrow(() -> new NotFoundException("Listing not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Listing not found"));
     }
 
     // ====================== UPDATE SPECIFIC FIELDS ======================
