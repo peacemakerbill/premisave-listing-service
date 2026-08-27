@@ -56,12 +56,17 @@ auth:
 wallet:
   service:
     url: ${WALLET_SERVICE_URL:http://localhost:8084}
-  internal:
-    # Static service-to-service credential — NOT the user's JWT. Must match
-    # whatever wallet-service expects on its X-API-Key header for internal
-    # calls. There is no safe default for this in a real environment; the
-    # fallback below is a placeholder only.
-    api-key: ${WALLET_INTERNAL_API_KEY:changeme-set-a-real-key}
+
+# One shared internal API key for service-to-service calls, meant to be
+# the exact same value across every Premisave microservice (not just
+# wallet-service — reuse this same property/value if listing-service ever
+# needs to authenticate calls FROM another service too). No default value
+# on purpose: a silently-wrong placeholder here caused a confusing 401 at
+# request time instead of a clear failure at startup. Missing this
+# property now fails the app on boot instead.
+internal:
+  service:
+    api-key: ${INTERNAL_SERVICE_API_KEY}
 
 # ==================== JWT ====================
 jwt:

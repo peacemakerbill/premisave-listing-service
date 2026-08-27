@@ -12,9 +12,9 @@
       "defaultValue": "http://localhost:8084"
     },
     {
-      "name": "wallet.internal.api-key",
+      "name": "internal.service.api-key",
       "type": "java.lang.String",
-      "description": "Static service-to-service API key sent as X-API-Key on calls to wallet-service's /internal/payment endpoint. Must match what wallet-service expects — has no safe default in a real environment."
+      "description": "Shared internal-service API key sent as X-API-Key on service-to-service calls (currently wallet-service's /internal/payment). Use the exact same value across every Premisave microservice — no default, since a wrong-but-present placeholder caused a confusing 401 at request time instead of a clear failure at startup."
     },
     {
       "name": "jwt.secret",

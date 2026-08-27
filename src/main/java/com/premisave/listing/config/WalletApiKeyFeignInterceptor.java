@@ -6,8 +6,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Attaches the static X-API-Key header wallet-service expects on its
- * internal, service-to-service endpoints (POST /internal/payment).
+ * Attaches the shared internal-service X-API-Key header wallet-service
+ * expects on its internal, service-to-service endpoints (POST
+ * /internal/payment). Uses one key value shared across every Premisave
+ * microservice (internal.service.api-key / INTERNAL_SERVICE_API_KEY),
+ * rather than a wallet-specific one — same value should be configured
+ * identically everywhere a service needs to authenticate a call to
+ * another service internally.
  *
  * This is deliberately NOT the JWT-forwarding pattern used for auth-service
  * (JwtFeignInterceptor) — wallet-service's internal endpoints authenticate
@@ -18,7 +23,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class WalletApiKeyFeignInterceptor implements RequestInterceptor {
 
-    @Value("${wallet.internal.api-key}")
+    @Value("${internal.service.api-key}")
     private String apiKey;
 
     @Override
