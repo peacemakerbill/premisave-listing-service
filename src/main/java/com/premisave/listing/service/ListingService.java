@@ -454,11 +454,22 @@ public class ListingService {
         }
 
         if (minPrice != null && maxPrice != null) {
-            query.addCriteria(Criteria.where("price").gte(BigDecimal.valueOf(minPrice)).lte(BigDecimal.valueOf(maxPrice)));
+            // Pass the raw Double directly rather than wrapping in
+            // BigDecimal.valueOf(...): Spring Data MongoDB's query-time
+            // conversion of a manually-built Criteria value doesn't
+            // reliably go through the same BigDecimal->Decimal128
+            // conversion path that document writes do, which was silently
+            // breaking range comparisons against the BigDecimal-typed
+            // price field. MongoDB itself compares numeric BSON types
+            // (double, decimal128, int, etc.) against each other
+            // correctly regardless of exact subtype, so passing a plain
+            // number sidesteps the conversion question entirely instead of
+            // depending on it working correctly.
+            query.addCriteria(Criteria.where("price").gte(minPrice).lte(maxPrice));
         } else if (minPrice != null) {
-            query.addCriteria(Criteria.where("price").gte(BigDecimal.valueOf(minPrice)));
+            query.addCriteria(Criteria.where("price").gte(minPrice));
         } else if (maxPrice != null) {
-            query.addCriteria(Criteria.where("price").lte(BigDecimal.valueOf(maxPrice)));
+            query.addCriteria(Criteria.where("price").lte(maxPrice));
         }
 
         if (textQuery != null && !textQuery.isBlank()) {
