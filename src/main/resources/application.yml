@@ -69,14 +69,20 @@ internal:
     api-key: ${INTERNAL_SERVICE_API_KEY}
 
 # ==================== JWT ====================
+# No default on purpose — same reasoning as INTERNAL_SERVICE_API_KEY
+# above: a real-looking placeholder here means the app silently signs and
+# verifies tokens with a value anyone reading this file already has,
+# rather than failing loudly if you forget to set your own.
 jwt:
-  secret: ${JWT_SECRET:eW91ci12ZXJ5LXNlY3VyZS1qd3Qtc2VjcmV0LWtleS0zMi1ieXRlcyE=}
+  secret: ${JWT_SECRET}
 
 # ==================== Cloudinary ====================
+# No defaults — these were previously real, working credentials
+# committed directly in this file. Set your own in .env.
 cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME:thepeacemakersllc}
-  api-key: ${CLOUDINARY_API_KEY:929659223288334}
-  api-secret: ${CLOUDINARY_API_SECRET:nAsBdgfXx86u7-Y8X2VnLa-2FbQ}
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}
 
 # ==================== Rate Limiting ====================
 # Per-key (user, falling back to IP) limit, enforced against a Redis-backed

@@ -31,3 +31,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Environment / secrets ###
+# .env.example is intentionally NOT ignored — it's the template with no
+# real values, meant to be checked in so anyone cloning the repo knows
+# what to set.
+.env
+.env.local
+.env.*.local
