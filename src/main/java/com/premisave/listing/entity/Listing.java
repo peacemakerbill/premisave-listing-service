@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -26,6 +28,14 @@ public class Listing extends BaseEntity {
     @Indexed
     private ListingStatus status = ListingStatus.PENDING;
 
+    // Stored as Decimal128 (NumberDecimal), not the Spring Data MongoDB
+    // default of String for BigDecimal — a string-typed price field can
+    // never match a numeric $gte/$lte range query, which is exactly what
+    // was silently breaking minPrice/maxPrice filtering. Existing
+    // documents created before this annotation was added will still have
+    // price stored as a string and need a one-time migration (see
+    // CHANGES.md) — this only fixes the mapping going forward.
+    @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal price;
 
     /** Display/browse currency only — actual payment settlement is always

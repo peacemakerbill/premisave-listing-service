@@ -7,6 +7,8 @@ import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -29,7 +31,12 @@ public class ListingPromotion extends BaseEntity {
     private String ownerId;
 
     private int days;
+    // Stored as Decimal128, not Spring Data MongoDB's default String
+    // representation for BigDecimal — see Listing.price for why that
+    // matters for range queries.
+    @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal dailyRate;
+    @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal totalAmount;
 
     // Wallet-service settles in KES; this was previously defaulted to USD,

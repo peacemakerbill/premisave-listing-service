@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -23,7 +25,11 @@ public class Payment extends BaseEntity {
 
     /** The amount in KES — the system's canonical currency, and what's
      *  actually sent to wallet-service. Always stored regardless of what
-     *  currency a listing's price is displayed in. */
+     *  currency a listing's price is displayed in. Stored as Decimal128,
+     *  not Spring Data MongoDB's default String representation for
+     *  BigDecimal — see Listing.price for why that matters for range
+     *  queries. */
+    @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal amountKes;
 
     // ====================== CHARGED AMOUNT ======================
@@ -32,11 +38,22 @@ public class Payment extends BaseEntity {
      *  exchangeRate below are effectively always KES/1.0 for wallet-routed
      *  payments. Kept as separate fields (rather than removed) in case a
      *  non-wallet, foreign-currency-charged path is reintroduced later. */
+    @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal amount;
     private String currency = "KES";
+    @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal exchangeRate;
 
     // ====================== PAYMENT DETAILS ======================
+
+    // A `method` field (PAYPAL/STRIPE/MPESA/AIRTEL_MONEY) used to live here.
+    // Removed rather than deprecated: payment provider is entirely
+    // wallet-service's concern now, and MongoDB being schemaless means this
+    // is safe to drop outright — old documents that still have a "method"
+    // key just keep an unmapped field that Spring Data ignores on read.
+    // PaymentMethod.java (the enum) can go too if nothing else references it
+    // — worth double-checking dto/PaymentRequest.java, which wasn't touched
+    // in this pass.
 
     private PaymentStatus status = PaymentStatus.PENDING;
 
