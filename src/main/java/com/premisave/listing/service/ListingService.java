@@ -454,22 +454,19 @@ public class ListingService {
         }
 
         if (minPrice != null && maxPrice != null) {
-            // Pass the raw Double directly rather than wrapping in
-            // BigDecimal.valueOf(...): Spring Data MongoDB's query-time
-            // conversion of a manually-built Criteria value doesn't
-            // reliably go through the same BigDecimal->Decimal128
-            // conversion path that document writes do, which was silently
-            // breaking range comparisons against the BigDecimal-typed
-            // price field. MongoDB itself compares numeric BSON types
-            // (double, decimal128, int, etc.) against each other
-            // correctly regardless of exact subtype, so passing a plain
-            // number sidesteps the conversion question entirely instead of
-            // depending on it working correctly.
-            query.addCriteria(Criteria.where("price").gte(minPrice).lte(maxPrice));
+            // Must be BigDecimal, not a raw Double: price is explicitly
+            // mapped as Decimal128 (@Field(targetType = FieldType.DECIMAL128)
+            // on Listing.price), and Spring Data MongoDB only has a
+            // registered converter from BigDecimal -> Decimal128, not from
+            // Double -> Decimal128 directly. Passing a raw Double here
+            // throws "Failed to convert from type [java.lang.Double] to
+            // type [org.bson.types.Decimal128]" once that explicit typing
+            // is in place.
+            query.addCriteria(Criteria.where("price").gte(BigDecimal.valueOf(minPrice)).lte(BigDecimal.valueOf(maxPrice)));
         } else if (minPrice != null) {
-            query.addCriteria(Criteria.where("price").gte(minPrice));
+            query.addCriteria(Criteria.where("price").gte(BigDecimal.valueOf(minPrice)));
         } else if (maxPrice != null) {
-            query.addCriteria(Criteria.where("price").lte(maxPrice));
+            query.addCriteria(Criteria.where("price").lte(BigDecimal.valueOf(maxPrice)));
         }
 
         if (textQuery != null && !textQuery.isBlank()) {
