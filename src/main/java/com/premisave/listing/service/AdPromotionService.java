@@ -97,9 +97,10 @@ public class AdPromotionService {
             );
         }
 
-        // 4. Resolve effective daily rate: customDailyRate overrides base rate
+        // 4. Daily rate is always the configured value from
+        // application.yml (ad.promotion.daily-rate) — no client override.
         int days = request.getDays();
-        BigDecimal effectiveRate = resolveEffectiveRate(request.getCustomDailyRate());
+        BigDecimal effectiveRate = dailyRate;
         BigDecimal totalAmount = effectiveRate.multiply(BigDecimal.valueOf(days));
 
         // 5. Create the promotion row first (PENDING) so its id is available
@@ -203,7 +204,7 @@ public class AdPromotionService {
             throw new RuntimeException("You can only extend promotion on your own listings.");
         }
 
-        BigDecimal effectiveRate = resolveEffectiveRate(null);
+        BigDecimal effectiveRate = dailyRate;
         BigDecimal totalAmount = effectiveRate.multiply(BigDecimal.valueOf(additionalDays));
 
         LocalDateTime baseDate = (listing.isPromoted()
@@ -325,24 +326,5 @@ public class AdPromotionService {
      *  one unbounded list. */
     public Page<ListingPromotion> getUserPromotions(String ownerId, Pageable pageable) {
         return promotionRepository.findByOwnerId(ownerId, pageable);
-    }
-
-    // ====================== PRIVATE HELPERS ======================
-
-    /**
-     * Resolves the effective daily rate for a promotion or extension.
-     *
-     * Priority:
-     * 1. customDailyRate from request (if positive) — always wins.
-     * 2. Base daily rate from config.
-     *
-     * @param customDailyRate optional override from the request DTO
-     * @return the resolved rate
-     */
-    private BigDecimal resolveEffectiveRate(BigDecimal customDailyRate) {
-        if (customDailyRate != null && customDailyRate.compareTo(BigDecimal.ZERO) > 0) {
-            return customDailyRate;
-        }
-        return dailyRate;
     }
 }

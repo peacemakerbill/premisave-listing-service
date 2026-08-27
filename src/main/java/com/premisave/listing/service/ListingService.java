@@ -16,7 +16,6 @@ import com.premisave.listing.repository.*;
 import com.premisave.listing.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -49,9 +48,6 @@ public class ListingService {
     private final Cloudinary cloudinary;
     private final JwtService jwtService; // for role extraction
     private final MongoTemplate mongoTemplate;
-
-    @Value("${ad.promotion.daily-rate:2.99}")
-    private BigDecimal dailyRate;
 
     // ====================== CREATE ======================
 
