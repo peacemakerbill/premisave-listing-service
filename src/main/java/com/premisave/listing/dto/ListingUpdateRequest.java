@@ -37,6 +37,8 @@ public class ListingUpdateRequest {
     private Boolean hasWifi;
     private Boolean hasKitchen;
     private List<String> amenities;
+    private BigDecimal pricePerDay;
+    private BigDecimal pricePerNight;
 
     // Long Term Rental
     private Integer minLeaseMonths;

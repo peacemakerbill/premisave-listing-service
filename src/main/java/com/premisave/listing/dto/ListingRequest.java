@@ -48,6 +48,13 @@ public class ListingRequest {
     private Boolean hasKitchen;
     private List<String> amenities;
 
+    /** At least one of these two is required for SHORT_TERM_RENTAL
+     *  (enforced in ListingService) — the top-level price/priceUnit above
+     *  get overridden automatically for this category, derived from
+     *  whichever of these is lower, purely for search/sort purposes. */
+    private BigDecimal pricePerDay;
+    private BigDecimal pricePerNight;
+
     // Long Term Rental
     private Integer minLeaseMonths;
     private Boolean furnished;

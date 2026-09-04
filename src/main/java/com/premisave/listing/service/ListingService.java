@@ -103,6 +103,14 @@ public class ListingService {
         listing.setCategory(request.getCategory());
         listing.setPrice(request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO);
         listing.setPriceUnit(resolvePriceUnit(request.getPriceUnit(), request.getCategory()));
+        if (listing instanceof ShortTermRental st) {
+            // Overrides whatever price/priceUnit was just set above — for
+            // this category the real prices are pricePerDay/pricePerNight;
+            // the base Listing fields are a derived "starting from" value
+            // that exists purely so search/sort (which only knows about
+            // one price field) still has something sensible to compare.
+            applyPrimaryPriceFromShortTermRates(st);
+        }
         listing.setLatitude(request.getLatitude());
         listing.setLongitude(request.getLongitude());
         listing.setAddress(request.getAddress());
@@ -153,8 +161,44 @@ public class ListingService {
         };
     }
 
+    /**
+     * Derives the base Listing.price/priceUnit from a ShortTermRental's
+     * two real prices (pricePerDay, pricePerNight) — whichever is lower
+     * wins, since that's the natural "starting from" figure for search
+     * results and sorting. If only one is set, that one wins outright. If
+     * neither is set, leaves price/priceUnit untouched (createShortTermRental
+     * already rejects that case on create; on update, a listing that
+     * already has valid values just keeps them).
+     */
+    private void applyPrimaryPriceFromShortTermRates(ShortTermRental st) {
+        BigDecimal day = st.getPricePerDay();
+        BigDecimal night = st.getPricePerNight();
+
+        if (day != null && night != null) {
+            if (day.compareTo(night) <= 0) {
+                st.setPrice(day);
+                st.setPriceUnit(PriceUnit.PER_DAY);
+            } else {
+                st.setPrice(night);
+                st.setPriceUnit(PriceUnit.PER_NIGHT);
+            }
+        } else if (day != null) {
+            st.setPrice(day);
+            st.setPriceUnit(PriceUnit.PER_DAY);
+        } else if (night != null) {
+            st.setPrice(night);
+            st.setPriceUnit(PriceUnit.PER_NIGHT);
+        }
+    }
+
     private ShortTermRental createShortTermRental(ListingRequest r) {
+        if (r.getPricePerDay() == null && r.getPricePerNight() == null) {
+            throw new IllegalArgumentException(
+                "Short-term rentals require at least one of pricePerDay or pricePerNight.");
+        }
         ShortTermRental st = new ShortTermRental();
+        st.setPricePerDay(r.getPricePerDay());
+        st.setPricePerNight(r.getPricePerNight());
         st.setMaxGuests(r.getMaxGuests() != null ? r.getMaxGuests() : 1);
         st.setBedrooms(r.getBedrooms() != null ? r.getBedrooms() : 1);
         st.setBathrooms(r.getBathrooms() != null ? r.getBathrooms() : 1);
@@ -326,6 +370,13 @@ public class ListingService {
         if (r.getHasWifi() != null) st.setHasWifi(r.getHasWifi());
         if (r.getHasKitchen() != null) st.setHasKitchen(r.getHasKitchen());
         if (r.getAmenities() != null) st.setAmenities(r.getAmenities());
+        if (r.getPricePerDay() != null) st.setPricePerDay(r.getPricePerDay());
+        if (r.getPricePerNight() != null) st.setPricePerNight(r.getPricePerNight());
+        // Re-derive the base price/priceUnit whenever either rate changes,
+        // same logic as on create.
+        if (r.getPricePerDay() != null || r.getPricePerNight() != null) {
+            applyPrimaryPriceFromShortTermRates(st);
+        }
     }
 
     private void updateLongTermRental(LongTermRental lt, ListingUpdateRequest r) {
@@ -605,6 +656,10 @@ public class ListingService {
         resp.setStatus(listing.getStatus());
         resp.setPrice(listing.getPrice());
         resp.setPriceUnit(listing.getPriceUnit());
+        if (listing instanceof ShortTermRental st) {
+            resp.setPricePerDay(st.getPricePerDay());
+            resp.setPricePerNight(st.getPricePerNight());
+        }
         resp.setCurrency(listing.getCurrency());
         resp.setCity(listing.getCity());
         resp.setMainImageUrl(listing.getMainImageUrl());

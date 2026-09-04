@@ -23,6 +23,12 @@ public class MyListingResponse {
     private ListingStatus status;
     private BigDecimal price;
     private PriceUnit priceUnit;
+    /** Only populated for SHORT_TERM_RENTAL — null for every other
+     *  category. The base price/priceUnit above are a derived "starting
+     *  from" value for that category; these two are the actual selectable
+     *  rates. */
+    private BigDecimal pricePerDay;
+    private BigDecimal pricePerNight;
     private String currency;
     private String city;
     private String mainImageUrl;
