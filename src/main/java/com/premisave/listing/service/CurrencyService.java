@@ -22,22 +22,28 @@ import java.util.Set;
  * Wraps the Frankfurter exchange rate API (https://frankfurter.dev) — free,
  * open-source, no API key required, sourced from 84 central banks.
  *
- * All rates are fetched FROM KES (the system's canonical currency).
+ * All rates are fetched FROM the system's canonical currency (BASE_CURRENCY,
+ * currently USD). Method/field names are deliberately currency-agnostic
+ * (convertFromBase, not convertFromUsd) — this used to be KES, and renamed
+ * everything the first time it changed; naming this generically means the
+ * next change (if there is one) only touches BASE_CURRENCY's value, not
+ * every method/field name that mentions a specific currency.
  *
  * NOTE: The legacy Frankfurter v1 API only covers ~30 major (mostly ECB)
- * currencies and does NOT support KES. This service uses the v2 API
- * (https://api.frankfurter.dev/v2), which covers 200+ currencies including KES.
+ * currencies. This service uses the v2 API
+ * (https://api.frankfurter.dev/v2), which covers 200+ currencies.
  *
- * Caching strategy (unchanged from the previous FastForex implementation):
- *   - Full rate table cached in Redis for 1 hour under key "fx:rates:KES"
+ * Caching strategy:
+ *   - Full rate table cached in Redis for 1 hour under a key derived from
+ *     BASE_CURRENCY (e.g. "fx:rates:USD")
  *   - Individual pair lookups read from that cached map — no extra API calls
  *   - On cache miss, the full table is refreshed in one API call
  *   - This means regardless of how many users are converting currencies
  *     simultaneously, the system makes at most 1 API call per hour
  *
  * Frankfurter v2 API:
- *   GET https://api.frankfurter.dev/v2/rates?base=KES
- *   Response: a JSON array of { "date": "...", "base": "KES", "quote": "USD", "rate": 0.00775 }
+ *   GET https://api.frankfurter.dev/v2/rates?base=USD
+ *   Response: a JSON array of { "date": "...", "base": "USD", "quote": "KES", "rate": 129.4 }
  *   one entry per supported currency (no API key needed).
  */
 @Slf4j
@@ -51,63 +57,65 @@ public class CurrencyService {
     @Value("${frankfurter.base-url:https://api.frankfurter.dev}")
     private String baseUrl;
 
-    /** Canonical system currency — all amounts stored in KES on the backend */
-    public static final String BASE_CURRENCY = "KES";
+    /** Canonical system currency — all amounts stored/settled in this
+     *  currency on the backend. */
+    public static final String BASE_CURRENCY = "USD";
 
-    private static final String REDIS_KEY = "fx:rates:KES";
+    private static final String REDIS_KEY = "fx:rates:" + BASE_CURRENCY;
     private static final Duration CACHE_TTL = Duration.ofHours(1);
 
     // ====================== PUBLIC API ======================
 
     /**
-     * Convert an amount from KES to the target currency.
+     * Convert an amount from the base currency to the target currency.
      *
-     * @param amountKes   amount in KES (the canonical backend currency)
-     * @param targetCurrency  ISO 4217 currency code e.g. "USD", "EUR", "NGN"
+     * @param amountBase      amount in BASE_CURRENCY (the canonical backend currency)
+     * @param targetCurrency  ISO 4217 currency code e.g. "KES", "EUR", "NGN"
      * @return converted amount, rounded to 2 decimal places
      */
-    public BigDecimal convertFromKes(BigDecimal amountKes, String targetCurrency) {
+    public BigDecimal convertFromBase(BigDecimal amountBase, String targetCurrency) {
         if (targetCurrency == null || targetCurrency.isBlank()
                 || targetCurrency.equalsIgnoreCase(BASE_CURRENCY)) {
-            return amountKes.setScale(2, RoundingMode.HALF_UP);
+            return amountBase.setScale(2, RoundingMode.HALF_UP);
         }
 
         BigDecimal rate = getRate(targetCurrency.toUpperCase());
-        BigDecimal converted = amountKes.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal converted = amountBase.multiply(rate).setScale(2, RoundingMode.HALF_UP);
 
-        log.debug("Converted {} KES → {} {} (rate: {})", amountKes, converted, targetCurrency, rate);
+        log.debug("Converted {} {} → {} {} (rate: {})", amountBase, BASE_CURRENCY, converted, targetCurrency, rate);
         return converted;
     }
 
     /**
-     * Convert an amount from a foreign currency back to KES.
-     * Used when a payment arrives in a foreign currency and we need the KES equivalent for records.
+     * Convert an amount from a foreign currency back to the base currency.
+     * Used when a payment arrives in a foreign currency and we need the
+     * base-currency equivalent for records.
      *
      * @param amount          amount in the source currency
      * @param sourceCurrency  ISO 4217 currency code
-     * @return equivalent amount in KES
+     * @return equivalent amount in BASE_CURRENCY
      */
-    public BigDecimal convertToKes(BigDecimal amount, String sourceCurrency) {
+    public BigDecimal convertToBase(BigDecimal amount, String sourceCurrency) {
         if (sourceCurrency == null || sourceCurrency.isBlank()
                 || sourceCurrency.equalsIgnoreCase(BASE_CURRENCY)) {
             return amount.setScale(2, RoundingMode.HALF_UP);
         }
 
-        // Rate is KES per 1 unit of source currency = 1 / (KES→source rate)
-        BigDecimal kesPerUnit = getRate(sourceCurrency.toUpperCase());
-        if (kesPerUnit.compareTo(BigDecimal.ZERO) == 0) {
+        // Rate is BASE per 1 unit of source currency = 1 / (BASE→source rate)
+        BigDecimal basePerUnit = getRate(sourceCurrency.toUpperCase());
+        if (basePerUnit.compareTo(BigDecimal.ZERO) == 0) {
             throw new RuntimeException("Invalid exchange rate (zero) for currency: " + sourceCurrency);
         }
 
-        BigDecimal amountInKes = amount.divide(kesPerUnit, 10, RoundingMode.HALF_UP)
+        BigDecimal amountInBase = amount.divide(basePerUnit, 10, RoundingMode.HALF_UP)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        log.debug("Converted {} {} → {} KES (rate: {})", amount, sourceCurrency, amountInKes, kesPerUnit);
-        return amountInKes;
+        log.debug("Converted {} {} → {} {} (rate: {})", amount, sourceCurrency, amountInBase, BASE_CURRENCY, basePerUnit);
+        return amountInBase;
     }
 
     /**
-     * Get the live exchange rate: 1 KES = ? targetCurrency
+     * Get the live exchange rate: 1 BASE_CURRENCY = ? targetCurrency
      *
      * @param targetCurrency ISO 4217 code
      * @return rate as BigDecimal
@@ -115,7 +123,7 @@ public class CurrencyService {
     public BigDecimal getRate(String targetCurrency) {
         String upper = targetCurrency.toUpperCase();
 
-        // KES → KES is always 1, and Frankfurter never returns the base as one of the quotes
+        // BASE → BASE is always 1, and Frankfurter never returns the base as one of the quotes
         if (upper.equals(BASE_CURRENCY)) {
             return BigDecimal.ONE;
         }
@@ -126,7 +134,7 @@ public class CurrencyService {
                 : null;
 
         if (cached != null) {
-            log.debug("Cache HIT for {}/KES rate: {}", upper, cached);
+            log.debug("Cache HIT for {}/{} rate: {}", upper, BASE_CURRENCY, cached);
             return new BigDecimal(cached);
         }
 
@@ -159,7 +167,7 @@ public class CurrencyService {
     }
 
     /**
-     * Returns the full rate map: { "USD": "0.00775", "EUR": "0.00712", ... }
+     * Returns the full rate map: { "KES": "129.4", "EUR": "0.92", ... }
      * Always reads from cache; refreshes if stale.
      */
     public Map<Object, Object> getAllRates() {
@@ -172,12 +180,13 @@ public class CurrencyService {
     // ====================== CACHE REFRESH ======================
 
     /**
-     * Fetches the full KES-based rate table from Frankfurter and stores it in Redis.
-     * Called on cache miss. Can also be called by a scheduler to pre-warm the cache.
+     * Fetches the full base-currency rate table from Frankfurter and stores
+     * it in Redis. Called on cache miss. Can also be called by a scheduler
+     * to pre-warm the cache.
      *
      * Frankfurter's /v2/rates endpoint returns a JSON array, one row per quote
      * currency, e.g.:
-     *   [{"date":"2026-06-19","base":"KES","quote":"USD","rate":0.00775}, ...]
+     *   [{"date":"2026-06-19","base":"USD","quote":"KES","rate":129.4}, ...]
      */
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public void refreshRates() {
@@ -216,7 +225,7 @@ public class CurrencyService {
                     rateStrings.size(), BASE_CURRENCY);
 
         } catch (Exception e) {
-            log.error("Failed to refresh exchange rates from Frankfurter: {}", e.getMessage(), e);
+            log.error("Failed to refresh exchange rates from Frankfurter: {} — {}", e.getClass().getSimpleName(), e.getMessage());
             // Do not rethrow — stale cache is better than a crash
         }
     }

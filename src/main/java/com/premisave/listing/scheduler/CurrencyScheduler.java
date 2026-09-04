@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
  * CurrencyScheduler
  *
  * Pre-warms the Redis exchange rate cache every hour so that
- * no user request ever has to wait for a live FastForex API call.
+ * no user request ever has to wait for a live Frankfurter API call.
  *
  * Without this, the first request after cache expiry would trigger
  * a live API call and experience slightly higher latency.
@@ -33,12 +33,12 @@ public class CurrencyScheduler {
      */
     @Scheduled(initialDelay = 0, fixedDelay = 3_600_000)
     public void refreshExchangeRates() {
-        log.info("Scheduled: refreshing exchange rates from FastForex...");
+        log.info("Scheduled: refreshing exchange rates from Frankfurter...");
         try {
             currencyService.refreshRates();
             log.info("Scheduled: exchange rate refresh complete.");
         } catch (Exception e) {
-            log.error("Scheduled: exchange rate refresh failed: {}", e.getMessage(), e);
+            log.error("Scheduled: exchange rate refresh failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
             // Non-fatal — stale cached rates are still served until next successful refresh
         }
     }

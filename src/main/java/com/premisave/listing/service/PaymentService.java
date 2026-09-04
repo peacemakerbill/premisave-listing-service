@@ -5,7 +5,6 @@ import com.premisave.listing.dto.wallet_service.WalletInternalPaymentRequest;
 import com.premisave.listing.dto.wallet_service.WalletPaymentResponse;
 import com.premisave.listing.entity.Payment;
 import com.premisave.listing.enums.PaymentStatus;
-import com.premisave.listing.exception.NotFoundException;
 import com.premisave.listing.exception.WalletServiceUnavailableException;
 import com.premisave.listing.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -23,7 +21,7 @@ import java.util.UUID;
  * longer talks to any payment gateway directly (M-Pesa, Stripe, PayPal,
  * etc.) — it only asks wallet-service to debit an existing wallet balance
  * via POST /internal/payment, and keeps a local Payment record as an audit
- * mirror (so getUserPayments/getPaymentById don't need a cross-service call).
+ * mirror.
  *
  * This is deliberately synchronous now: debiting an existing balance is a
  * different operation from funding a wallet via an external gateway (which
@@ -133,16 +131,5 @@ public class PaymentService {
         }
 
         return paymentRepository.save(payment);
-    }
-
-    // ====================== QUERIES ======================
-
-    public List<Payment> getUserPayments(String userId) {
-        return paymentRepository.findByUserId(userId);
-    }
-
-    public Payment getPaymentById(String id) {
-        return paymentRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Payment not found"));
     }
 }

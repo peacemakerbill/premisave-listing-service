@@ -16,7 +16,10 @@ import java.util.Set;
  *
  * Public endpoints — no authentication required.
  * The frontend uses these for display-only price conversion while browsing.
- * Actual payment conversion is handled internally by PaymentService.
+ * Actual payment settlement happens directly in USD via wallet-service —
+ * no currency conversion occurs on the payment path itself, since
+ * wallet-service's canonical currency and this system's canonical currency
+ * are both USD.
  *
  * Base: /currency
  */
@@ -29,11 +32,11 @@ public class CurrencyController {
     private final CurrencyService currencyService;
 
     /**
-     * Get all live rates from KES.
+     * Get all live rates from the base currency (USD).
      *
      * GET /currency/rates
      *
-     * Response: { "base": "KES", "rates": { "USD": "0.00775", "EUR": "0.00712", ... } }
+     * Response: { "base": "USD", "rates": { "KES": "129.4", "EUR": "0.92", ... } }
      *
      * Frontend uses this to display listing prices in the user's preferred currency.
      * Rates are cached in Redis and refreshed every hour — fast response, no API cost per user.
@@ -50,11 +53,11 @@ public class CurrencyController {
     }
 
     /**
-     * Get a single exchange rate from KES to a target currency.
+     * Get a single exchange rate from the base currency (USD) to a target currency.
      *
-     * GET /currency/rate?to=USD
+     * GET /currency/rate?to=KES
      *
-     * Response: { "base": "KES", "target": "USD", "rate": "0.00775" }
+     * Response: { "base": "USD", "target": "KES", "rate": "129.4" }
      */
     @GetMapping("/rate")
     public ResponseEntity<Map<String, Object>> getRate(@RequestParam String to) {
@@ -69,11 +72,11 @@ public class CurrencyController {
     }
 
     /**
-     * Convert a KES amount to a target currency.
+     * Convert a base-currency (USD) amount to a target currency.
      *
-     * GET /currency/convert?amount=299&to=USD
+     * GET /currency/convert?amount=2.99&to=KES
      *
-     * Response: { "from": "KES", "to": "USD", "originalAmount": 299, "convertedAmount": 2.32, "rate": "0.00775" }
+     * Response: { "from": "USD", "to": "KES", "originalAmount": 2.99, "convertedAmount": 386.9, "rate": "129.4" }
      *
      * Useful for the frontend to display promotion prices in the user's local currency.
      */
@@ -84,7 +87,7 @@ public class CurrencyController {
 
         String targetCurrency = to.toUpperCase();
         BigDecimal rate = currencyService.getRate(targetCurrency);
-        BigDecimal converted = currencyService.convertFromKes(amount, targetCurrency);
+        BigDecimal converted = currencyService.convertFromBase(amount, targetCurrency);
 
         Map<String, Object> response = new HashMap<>();
         response.put("from", CurrencyService.BASE_CURRENCY);
@@ -101,7 +104,7 @@ public class CurrencyController {
      *
      * GET /currency/supported
      *
-     * Response: { "currencies": ["USD", "EUR", "GBP", "NGN", ...] }
+     * Response: { "currencies": ["KES", "EUR", "GBP", "NGN", ...] }
      *
      * Frontend uses this to populate the currency selector dropdown.
      */
