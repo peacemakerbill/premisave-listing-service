@@ -62,7 +62,7 @@ public class PaymentService {
      * @param userId       the paying user
      * @param referenceId  optional caller-supplied id (e.g. a promotion's
      *                     own id) folded into the wallet-service reference
-     * @param amountKes    amount in KES (wallet-service's canonical currency)
+     * @param amountUsd    amount in USD (wallet-service's canonical currency)
      * @param service      wallet-service's "service" tag, e.g. "AD_SUBSCRIPTION"
      * @param description  human-readable description for wallet-service's records
      * @return the persisted local Payment record
@@ -70,13 +70,13 @@ public class PaymentService {
     @Transactional
     public Payment processPayment(String userId,
                                   String referenceId,
-                                  BigDecimal amountKes,
+                                  BigDecimal amountUsd,
                                   String service,
                                   String description) {
         if (userId == null || userId.isBlank()) {
             throw new IllegalArgumentException("userId must not be null or blank.");
         }
-        if (amountKes == null || amountKes.compareTo(BigDecimal.ZERO) <= 0) {
+        if (amountUsd == null || amountUsd.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Payment amount must be positive.");
         }
         if (service == null || service.isBlank()) {
@@ -88,16 +88,16 @@ public class PaymentService {
         Payment payment = new Payment();
         payment.setUserId(userId);
         payment.setSubscriptionId(referenceId);
-        payment.setAmountKes(amountKes);
-        payment.setAmount(amountKes);
-        payment.setCurrency(CurrencyService.BASE_CURRENCY);
+        payment.setAmountUsd(amountUsd);
+        payment.setAmount(amountUsd);
+        payment.setCurrency("USD");
         payment.setExchangeRate(BigDecimal.ONE);
         payment.setStatus(PaymentStatus.PENDING);
         payment.setTransactionRef(reference);
         payment = paymentRepository.save(payment);
 
         WalletInternalPaymentRequest request = new WalletInternalPaymentRequest(
-                userId, amountKes, service, description, INITIATED_BY, reference);
+                userId, amountUsd, service, description, INITIATED_BY, reference);
 
         try {
             WalletPaymentResponse response = walletServiceClient.debitForService(request);
@@ -105,13 +105,13 @@ public class PaymentService {
             if (response != null && response.isSuccess()) {
                 payment.setStatus(PaymentStatus.COMPLETED);
                 payment.setPaidAt(LocalDateTime.now());
-                log.info("Wallet debit succeeded: userId={}, amountKes={}, service={}, reference={}",
-                        userId, amountKes, service, reference);
+                log.info("Wallet debit succeeded: userId={}, amountUsd={}, service={}, reference={}",
+                        userId, amountUsd, service, reference);
             } else {
                 payment.setStatus(PaymentStatus.FAILED);
                 String reason = response != null ? response.getMessage() : "no response from wallet-service";
-                log.warn("Wallet debit failed: userId={}, amountKes={}, reference={}, reason={}",
-                        userId, amountKes, reference, reason);
+                log.warn("Wallet debit failed: userId={}, amountUsd={}, reference={}, reason={}",
+                        userId, amountUsd, reference, reason);
             }
         } catch (WalletServiceUnavailableException e) {
             // Distinct from a normal failed debit (e.g. insufficient

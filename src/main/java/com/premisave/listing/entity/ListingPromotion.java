@@ -39,9 +39,8 @@ public class ListingPromotion extends BaseEntity {
     @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal totalAmount;
 
-    // Wallet-service settles in KES; this was previously defaulted to USD,
-    // inconsistent with everything else in the payment path.
-    private String currency = "KES";
+    // Wallet-service settles in USD.
+    private String currency = "USD";
 
     private LocalDateTime startDate;
     private LocalDateTime endDate;

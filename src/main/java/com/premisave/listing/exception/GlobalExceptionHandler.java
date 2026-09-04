@@ -144,19 +144,23 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Handle Access Denied (403) - When user doesn't have required role (ADMIN/FINANCE)
+     * Handle Access Denied (403). This exception now comes from two
+     * genuinely different sources: Spring Security's @PreAuthorize on
+     * admin-only endpoints, AND ListingService's own ownership/role checks
+     * (updateListing/deleteListing/archiveListing/unarchiveListing,
+     * createListing's role check) — those were changed to throw this same
+     * type so they'd get a proper 403 instead of a generic 400, but this
+     * handler still had the old hardcoded "requires ADMIN or FINANCE role"
+     * message baked in, which is simply wrong for the ownership-check
+     * cases. Uses the exception's own message instead, which is accurate
+     * for both: @PreAuthorize's default message is generic but not
+     * misleading, and the programmatic throws already carry a specific,
+     * correct reason (e.g. "You can only update your own listings").
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<String>> handleAccessDeniedException(AccessDeniedException ex) {
         log.warn("Access Denied: {}", ex.getMessage());
-
-        ApiResponse<String> response = new ApiResponse<>(
-            false,
-            "Access Denied: You do not have permission to access this admin resource. " +
-            "This endpoint requires ADMIN or FINANCE role.",
-            null
-        );
-
+        ApiResponse<String> response = new ApiResponse<>(false, ex.getMessage(), null);
         return new ResponseEntity<>(response, HttpStatus.FORBIDDEN);
     }
 

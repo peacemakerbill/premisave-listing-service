@@ -42,10 +42,10 @@ public class AdPromotionService {
     private final ListingService listingService;
     private final AuthServiceClient authServiceClient;
 
-    @Value("${ad.promotion.daily-rate:299}")
+    @Value("${ad.promotion.daily-rate}")
     private BigDecimal dailyRate;
 
-    @Value("${ad.promotion.default-currency:KES}")
+    @Value("${ad.promotion.default-currency:USD}")
     private String defaultCurrency;
 
     // ====================== PROMOTE ======================
@@ -152,7 +152,7 @@ public class AdPromotionService {
             listing.setActive(true);
             listingService.saveListing(listing);
 
-            log.info("Listing {} promoted for {} days by user {} at KES {}/day. Payment: {}, Expires: {}",
+            log.info("Listing {} promoted for {} days by user {} at USD {}/day. Payment: {}, Expires: {}",
                     listing.getId(), days, userId, effectiveRate, payment.getId(), promotion.getEndDate());
         } else {
             log.warn("Listing {} promotion payment failed for user {}: paymentId={}",
@@ -253,7 +253,7 @@ public class AdPromotionService {
             listing.setActive(true);
             listingService.saveListing(listing);
 
-            log.info("Promotion extended: listing={}, +{}days, newExpiry={}, user={}, rate=KES{}, payment={}",
+            log.info("Promotion extended: listing={}, +{}days, newExpiry={}, user={}, rate=USD{}, payment={}",
                     listingId, additionalDays, newEndDate, userId, effectiveRate, payment.getId());
         } else {
             log.warn("Promotion extension payment failed: listing={}, user={}, paymentId={}",

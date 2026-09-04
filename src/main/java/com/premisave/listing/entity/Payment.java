@@ -21,26 +21,26 @@ public class Payment extends BaseEntity {
     private String subscriptionId;
     private String listingId;
 
-    // ====================== CANONICAL AMOUNT (always KES) ======================
+    // ====================== CANONICAL AMOUNT (always USD) ======================
 
-    /** The amount in KES — the system's canonical currency, and what's
+    /** The amount in USD — the system's canonical currency, and what's
      *  actually sent to wallet-service. Always stored regardless of what
      *  currency a listing's price is displayed in. Stored as Decimal128,
      *  not Spring Data MongoDB's default String representation for
      *  BigDecimal — see Listing.price for why that matters for range
      *  queries. */
     @Field(targetType = FieldType.DECIMAL128)
-    private BigDecimal amountKes;
+    private BigDecimal amountUsd;
 
     // ====================== CHARGED AMOUNT ======================
 
-    /** Wallet-service settles everything in KES today, so amount/currency/
-     *  exchangeRate below are effectively always KES/1.0 for wallet-routed
+    /** Wallet-service settles everything in USD today, so amount/currency/
+     *  exchangeRate below are effectively always USD/1.0 for wallet-routed
      *  payments. Kept as separate fields (rather than removed) in case a
      *  non-wallet, foreign-currency-charged path is reintroduced later. */
     @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal amount;
-    private String currency = "KES";
+    private String currency = "USD";
     @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal exchangeRate;
 

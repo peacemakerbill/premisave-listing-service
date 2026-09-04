@@ -95,8 +95,8 @@ rate-limit:
 # ==================== Ad Promotion ====================
 ad:
   promotion:
-    daily-rate: 299
-    default-currency: KES
+    daily-rate: 1
+    default-currency: USD
 
 # ====================== FRANKFURTER CURRENCY API ======================
 # Display-only currency conversion for browsing listings. Actual payment

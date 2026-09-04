@@ -38,8 +38,8 @@ public class Listing extends BaseEntity {
     @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal price;
 
-    /** Display/browse currency only — actual payment settlement is always
-     *  KES via wallet-service, regardless of what's shown here. */
+    /** Display/browse currency — currently always USD, matching what
+     *  wallet-service actually settles in. */
     private String currency = "USD";
 
     private Double latitude;
