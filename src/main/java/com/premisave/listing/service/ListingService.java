@@ -10,6 +10,7 @@ import com.premisave.listing.dto.auth_service.UserSummaryResponse;
 import com.premisave.listing.entity.*;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
+import com.premisave.listing.enums.PriceUnit;
 import com.premisave.listing.exception.AuthenticationFailedException;
 import com.premisave.listing.exception.NotFoundException;
 import com.premisave.listing.repository.*;
@@ -101,6 +102,7 @@ public class ListingService {
         listing.setDescription(request.getDescription());
         listing.setCategory(request.getCategory());
         listing.setPrice(request.getPrice() != null ? request.getPrice() : BigDecimal.ZERO);
+        listing.setPriceUnit(resolvePriceUnit(request.getPriceUnit(), request.getCategory()));
         listing.setLatitude(request.getLatitude());
         listing.setLongitude(request.getLongitude());
         listing.setAddress(request.getAddress());
@@ -128,6 +130,26 @@ public class ListingService {
             case LAND_SALE         -> createLandSale(request);
             case HOUSE_SALE        -> createHouseSale(request);
             case LEASE             -> createLease(request);
+        };
+    }
+
+    /**
+     * Resolves what a listing's price actually means. The client can
+     * specify it explicitly (e.g. a LEASE priced as a one-time TOTAL
+     * instead of the usual PER_MONTH); if they don't, this derives a
+     * sensible default from category — previously this was an unwritten,
+     * unenforced convention (nothing in the API stated whether a number
+     * meant "per night" or "total"), which is exactly the ambiguity this
+     * field exists to remove.
+     */
+    private PriceUnit resolvePriceUnit(PriceUnit requested, ListingCategory category) {
+        if (requested != null) {
+            return requested;
+        }
+        return switch (category) {
+            case SHORT_TERM_RENTAL -> PriceUnit.PER_NIGHT;
+            case LONG_TERM_RENTAL, LEASE -> PriceUnit.PER_MONTH;
+            case LAND_SALE, HOUSE_SALE -> PriceUnit.TOTAL;
         };
     }
 
@@ -195,6 +217,7 @@ public class ListingService {
         if (request.getTitle() != null) existing.setTitle(request.getTitle());
         if (request.getDescription() != null) existing.setDescription(request.getDescription());
         if (request.getPrice() != null) existing.setPrice(request.getPrice());
+        if (request.getPriceUnit() != null) existing.setPriceUnit(request.getPriceUnit());
         if (request.getLatitude() != null) existing.setLatitude(request.getLatitude());
         if (request.getLongitude() != null) existing.setLongitude(request.getLongitude());
         if (request.getAddress() != null) existing.setAddress(request.getAddress());
@@ -581,6 +604,7 @@ public class ListingService {
         resp.setCategory(listing.getCategory());
         resp.setStatus(listing.getStatus());
         resp.setPrice(listing.getPrice());
+        resp.setPriceUnit(listing.getPriceUnit());
         resp.setCurrency(listing.getCurrency());
         resp.setCity(listing.getCity());
         resp.setMainImageUrl(listing.getMainImageUrl());

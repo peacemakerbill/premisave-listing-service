@@ -1,6 +1,7 @@
 package com.premisave.listing.dto;
 
 import com.premisave.listing.enums.ListingCategory;
+import com.premisave.listing.enums.PriceUnit;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
@@ -17,6 +18,8 @@ public class ListingUpdateRequest {
 
     @Positive(message = "Price must be positive")
     private BigDecimal price;
+
+    private PriceUnit priceUnit;
 
     private Double latitude;
     private Double longitude;

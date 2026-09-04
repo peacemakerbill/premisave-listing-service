@@ -2,6 +2,7 @@ package com.premisave.listing.dto;
 
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
+import com.premisave.listing.enums.PriceUnit;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -21,6 +22,7 @@ public class MyListingResponse {
     private ListingCategory category;
     private ListingStatus status;
     private BigDecimal price;
+    private PriceUnit priceUnit;
     private String currency;
     private String city;
     private String mainImageUrl;

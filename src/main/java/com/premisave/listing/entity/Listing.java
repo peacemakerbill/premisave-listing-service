@@ -2,6 +2,7 @@ package com.premisave.listing.entity;
 
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
+import com.premisave.listing.enums.PriceUnit;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -37,6 +38,13 @@ public class Listing extends BaseEntity {
     // CHANGES.md) — this only fixes the mapping going forward.
     @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal price;
+
+    /** What the price above actually means — per-night, per-month, or a
+     *  one-time total. No hardcoded default here: ListingService derives a
+     *  sensible one per category if the request doesn't specify one, since
+     *  "monthly" vs "total" was previously an unwritten, unenforced
+     *  convention nothing in the API actually stated. */
+    private PriceUnit priceUnit;
 
     /** Display/browse currency — currently always USD, matching what
      *  wallet-service actually settles in. */

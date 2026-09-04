@@ -1,6 +1,7 @@
 package com.premisave.listing.dto;
 
 import com.premisave.listing.enums.ListingCategory;
+import com.premisave.listing.enums.PriceUnit;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -23,6 +24,11 @@ public class ListingRequest {
 
     @Positive(message = "Price must be positive")
     private BigDecimal price;
+
+    /** Optional — if omitted, ListingService derives a sensible default
+     *  from category (SHORT_TERM_RENTAL -> PER_NIGHT, LONG_TERM_RENTAL/
+     *  LEASE -> PER_MONTH, HOUSE_SALE/LAND_SALE -> TOTAL). */
+    private PriceUnit priceUnit;
 
     private Double latitude;
     private Double longitude;
