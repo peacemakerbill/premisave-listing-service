@@ -44,15 +44,21 @@
     },
     {
       "name": "ad.promotion.daily-rate",
-      "type": "java.lang.Integer",
+      "type": "java.math.BigDecimal",
       "description": "Daily rate charged for promoting an ad listing, in the default currency.",
-      "defaultValue": 299
+      "defaultValue": 2.99
     },
     {
       "name": "ad.promotion.default-currency",
       "type": "java.lang.String",
-      "description": "Default currency code used for ad promotion charges (e.g. KES, USD).",
-      "defaultValue": "KES"
+      "description": "Default currency code used for ad promotion charges (e.g. USD).",
+      "defaultValue": "USD"
+    },
+    {
+      "name": "ad.promotion.expiry-check-cron",
+      "type": "java.lang.String",
+      "description": "Cron expression controlling how often AdPromotionService checks for and deactivates expired promotions. Standard 6-field Spring cron (seconds minutes hours day-of-month month day-of-week).",
+      "defaultValue": "0 */5 * * * *"
     },
     {
       "name": "frankfurter.base-url",

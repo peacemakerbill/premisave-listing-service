@@ -97,6 +97,11 @@ ad:
   promotion:
     daily-rate: 1
     default-currency: USD
+    # Cron expression for the expired-promotion sweep
+    # (AdPromotionService.deactivateExpiredPromotions) — standard 6-field
+    # Spring cron (seconds minutes hours day-of-month month day-of-week).
+    # Defaults to every 5 minutes.
+    expiry-check-cron: "0 */5 * * * *"
 
 # ====================== FRANKFURTER CURRENCY API ======================
 # Display-only currency conversion for browsing listings. Actual payment

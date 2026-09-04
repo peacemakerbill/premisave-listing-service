@@ -42,7 +42,7 @@ public class AdPromotionService {
     private final ListingService listingService;
     private final AuthServiceClient authServiceClient;
 
-    @Value("${ad.promotion.daily-rate}")
+    @Value("${ad.promotion.daily-rate:2.99}")
     private BigDecimal dailyRate;
 
     @Value("${ad.promotion.default-currency:USD}")
@@ -276,11 +276,14 @@ public class AdPromotionService {
     // ====================== SCHEDULED: DEACTIVATE EXPIRED PROMOTIONS ======================
 
     /**
-     * Runs every hour. Only queries promotions whose end date has passed —
-     * avoids loading the entire promotions collection. Now backed by a
-     * compound index on (endDate, paymentStatus) — see ListingPromotion.
+     * Runs every 5 minutes by default — configurable via
+     * ad.promotion.expiry-check-cron in application.yml, so this can be
+     * tuned without a code change. Only queries promotions whose end date
+     * has passed — avoids loading the entire promotions collection. Backed
+     * by a compound index on (endDate, paymentStatus) — see
+     * ListingPromotion.
      */
-    @Scheduled(cron = "0 0 * * * *")
+    @Scheduled(cron = "${ad.promotion.expiry-check-cron:0 */5 * * * *}")
     @Transactional
     public void deactivateExpiredPromotions() {
         log.info("Scheduled task: checking for expired promotions...");
