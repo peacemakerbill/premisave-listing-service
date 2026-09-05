@@ -1,8 +1,8 @@
 package com.premisave.listing.service;
 
 import com.premisave.listing.client.WalletServiceClient;
+import com.premisave.listing.dto.ApiResponse;
 import com.premisave.listing.dto.wallet_service.WalletInternalPaymentRequest;
-import com.premisave.listing.dto.wallet_service.WalletPaymentResponse;
 import com.premisave.listing.entity.Payment;
 import com.premisave.listing.enums.PaymentStatus;
 import com.premisave.listing.exception.WalletServiceUnavailableException;
@@ -29,6 +29,10 @@ import java.util.UUID;
  * removes the PENDING-then-wait-for-callback lifecycle this class used to
  * manage for M-Pesa, and the circular @Lazy dependency on AdPromotionService
  * that existed only so that callback could notify it.
+ *
+ * No longer has any HTTP-facing endpoints (PaymentController was removed
+ * entirely) — processPayment is now purely internal plumbing, called only
+ * by AdPromotionService's wallet-debit flow.
  */
 @Slf4j
 @Service
@@ -88,6 +92,12 @@ public class PaymentService {
         payment.setSubscriptionId(referenceId);
         payment.setAmountUsd(amountUsd);
         payment.setAmount(amountUsd);
+        // Hardcoded rather than CurrencyService.BASE_CURRENCY: that constant
+        // drives Frankfurter's FX-rate cache for converting listing prices
+        // for display, a separate concern from what currency wallet-service
+        // actually settles in. The two happened to both be KES before;
+        // decoupling them here so a future display-currency change doesn't
+        // silently change what gets sent to wallet-service too.
         payment.setCurrency("USD");
         payment.setExchangeRate(BigDecimal.ONE);
         payment.setStatus(PaymentStatus.PENDING);
@@ -98,7 +108,7 @@ public class PaymentService {
                 userId, amountUsd, service, description, INITIATED_BY, reference);
 
         try {
-            WalletPaymentResponse response = walletServiceClient.debitForService(request);
+            ApiResponse<Object> response = walletServiceClient.debitForService(request);
 
             if (response != null && response.isSuccess()) {
                 payment.setStatus(PaymentStatus.COMPLETED);

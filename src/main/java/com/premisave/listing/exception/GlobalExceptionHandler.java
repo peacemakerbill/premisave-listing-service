@@ -113,6 +113,20 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
     }
 
+    // ====================== CONFLICT (409) ======================
+
+    /**
+     * A booking's requested dates overlap an existing booking on the same
+     * listing. 409 rather than 400: the request itself is well-formed and
+     * the listing exists, it's specifically unavailable for those dates.
+     */
+    @ExceptionHandler(BookingConflictException.class)
+    public ResponseEntity<ApiResponse<String>> handleBookingConflictException(BookingConflictException ex) {
+        log.warn("Booking conflict: {}", ex.getMessage());
+        ApiResponse<String> response = new ApiResponse<>(false, ex.getMessage(), null);
+        return new ResponseEntity<>(response, HttpStatus.CONFLICT);
+    }
+
     // ====================== AUTH (401 / 403) ======================
 
     /**

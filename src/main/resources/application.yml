@@ -39,6 +39,28 @@ spring:
       circuitbreaker:
         enabled: true
 
+  # No defaults on host/port/username/password on purpose — same reasoning
+  # as INTERNAL_SERVICE_API_KEY/JWT_SECRET/Cloudinary below: fail loudly at
+  # startup if unset, rather than silently trying to send mail through a
+  # placeholder SMTP server.
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# The "From" address EmailService uses — not a Spring Boot-recognized mail
+# property (Spring's mail starter has no such setting), so it's its own
+# top-level key rather than nested under spring.mail.* to avoid implying
+# it's something Spring itself reads.
+mail-from: ${MAIL_FROM:no-reply@premisave.com}
+
 # ==================== Server ====================
 server:
   port: 8082
@@ -95,7 +117,7 @@ rate-limit:
 # ==================== Ad Promotion ====================
 ad:
   promotion:
-    daily-rate: 1
+    daily-rate: 2
     default-currency: USD
     # Cron expression for the expired-promotion sweep
     # (AdPromotionService.deactivateExpiredPromotions) — standard 6-field

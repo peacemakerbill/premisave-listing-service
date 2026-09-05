@@ -12,6 +12,12 @@
       "defaultValue": "http://localhost:8084"
     },
     {
+      "name": "mail-from",
+      "type": "java.lang.String",
+      "description": "The 'From' address EmailService uses on every booking/interest notification email. Not a Spring Boot-recognized mail property — Spring's mail starter has no such setting, this is purely this service's own convention.",
+      "defaultValue": "no-reply@premisave.com"
+    },
+    {
       "name": "internal.service.api-key",
       "type": "java.lang.String",
       "description": "Shared internal-service API key sent as X-API-Key on service-to-service calls (currently wallet-service's /internal/payment). Use the exact same value across every Premisave microservice — no default, since a wrong-but-present placeholder caused a confusing 401 at request time instead of a clear failure at startup."
