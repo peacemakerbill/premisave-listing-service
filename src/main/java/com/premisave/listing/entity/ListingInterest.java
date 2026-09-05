@@ -8,15 +8,22 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
  * A lead: a customer expressing interest in a listing (long-term rental,
- * lease, house sale, land sale) and providing contact details so the owner
- * can reach out directly. No money or booking flow attached — this is
- * purely a "contact me about this" record.
+ * lease, house sale, land sale). No money or booking flow attached — this
+ * is purely a "contact me about this" record.
+ *
+ * Deliberately stores almost nothing about the customer beyond their
+ * stable identifiers (customerId, customerEmail) — full name, phone
+ * number, address, and profile picture are fetched live from auth-service
+ * whenever a response is built (see ListingInterestService), never
+ * persisted here, since those can change and a stored snapshot would
+ * silently go stale. If auth-service is unreachable when that fetch
+ * happens, the request fails with a clear error rather than silently
+ * returning stale or missing data.
  *
  * Cancelling interest deletes the record entirely (no soft-delete/status
- * field) — the customer's contact info simply shouldn't be retained once
- * they've said they're no longer interested. That means no historical
- * audit trail of past interest exists once cancelled; worth knowing if
- * that's ever needed later.
+ * field) — nothing to retain once the customer says they're no longer
+ * interested. That means no historical audit trail of past interest
+ * exists once cancelled; worth knowing if that's ever needed later.
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -27,7 +34,7 @@ public class ListingInterest extends BaseEntity {
     @Indexed
     private String listingId;
 
-    /** Stored at creation time so cancellation emails don't need to
+    /** Stored at creation time so cancellation notifications don't need to
      *  re-fetch the listing (which could fail if it's been deleted since). */
     private String listingTitle;
 
@@ -37,12 +44,10 @@ public class ListingInterest extends BaseEntity {
     @Indexed
     private String customerId;
 
-    // Contact details as explicitly provided at the time of the inquiry —
-    // not just pulled from the account profile, since the customer may
-    // want to give different/dedicated contact info for this inquiry.
-    private String fullName;
-    private String email;
-    private String phoneNumber;
-    private String address;
+    /** Stable, unlike the rest of the customer's profile — stored as a
+     *  convenience reference, not relied on as a fallback if auth-service
+     *  is down (the live fetch is still required for anything else). */
+    private String customerEmail;
+
     private String message;
 }

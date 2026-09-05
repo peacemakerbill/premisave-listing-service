@@ -27,19 +27,28 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Handles short-term rental bookings: creating one (which pays the owner
- * directly, tenant -> owner, via wallet-service's transfer endpoint — a
- * different wallet-service operation from AdPromotionService's "debit for
- * a service charge"), and cancelling one (which refunds the tenant,
- * owner -> tenant).
+ * directly, tenant -> owner, via wallet-service's transfer endpoint), and
+ * cancelling one (which refunds the tenant, owner -> tenant).
+ *
+ * Booking itself stores only stable identifiers (tenantId/tenantEmail,
+ * ownerId/ownerEmail). Every response embeds full tenant/owner details
+ * (name, phone, address, profile picture) fetched live from auth-service —
+ * never a stored snapshot. If auth-service is unreachable,
+ * AuthServiceClientFallbackFactory throws AuthServiceUnavailableException,
+ * which propagates straight through (nothing here catches it) to
+ * GlobalExceptionHandler, giving a clean 503 instead of a stale or
+ * incomplete response.
  *
  * ASSUMPTION carried from WalletTransferRequest: recipientAccountNumber is
  * the recipient's email, resolved via AuthServiceClient. If wallet-service
- * actually expects something else, only resolveRate()/the two transfer
- * call sites below need to change, not the overall flow.
+ * actually expects something else, only the two transfer call sites below
+ * need to change, not the overall flow.
  */
 @Slf4j
 @Service
@@ -94,7 +103,9 @@ public class BookingService {
         Booking booking = new Booking();
         booking.setListingId(listing.getId());
         booking.setTenantId(tenantId);
+        booking.setTenantEmail(tenant.getEmail());
         booking.setOwnerId(listing.getOwnerId());
+        booking.setOwnerEmail(owner.getEmail());
         booking.setCheckIn(request.getCheckIn());
         booking.setCheckOut(request.getCheckOut());
         booking.setPriceUnit(request.getPriceUnit());
@@ -123,13 +134,15 @@ public class BookingService {
                 log.info("Booking confirmed: id={}, listing={}, tenant={}, owner={}, amount={}",
                         booking.getId(), listing.getId(), tenantId, listing.getOwnerId(), totalAmount);
 
-                return toResponse(booking, true, "Booking confirmed! You have booked \"" + listing.getTitle() + "\".");
+                return toResponse(booking, true,
+                        "Booking confirmed! You have booked \"" + listing.getTitle() + "\".",
+                        tenant, owner);
             } else {
                 booking.setStatus(BookingStatus.FAILED);
                 bookingRepository.save(booking);
                 String reason = response != null ? response.getMessage() : "no response from wallet-service";
                 log.warn("Booking payment failed: id={}, reason={}", booking.getId(), reason);
-                return toResponse(booking, false, "Payment failed: " + reason);
+                return toResponse(booking, false, "Payment failed: " + reason, tenant, owner);
             }
         } catch (WalletServiceUnavailableException e) {
             booking.setStatus(BookingStatus.FAILED);
@@ -168,6 +181,8 @@ public class BookingService {
             throw new IllegalArgumentException("Only a confirmed booking can be cancelled.");
         }
 
+        // Fetched live — Booking only stores tenantEmail/ownerEmail, not
+        // the rest of either party's profile.
         UserSummaryResponse tenant = authServiceClient.getUserSummary(booking.getTenantId(), authHeader);
         UserSummaryResponse owner = authServiceClient.getUserSummary(booking.getOwnerId(), authHeader);
         if (tenant == null || tenant.getEmail() == null) {
@@ -195,7 +210,8 @@ public class BookingService {
                 // since the tenant hasn't actually gotten their money back.
                 String reasonMsg = response != null ? response.getMessage() : "no response from wallet-service";
                 log.warn("Booking refund failed: id={}, reason={}", booking.getId(), reasonMsg);
-                return toResponse(booking, false, "Cancellation failed — refund could not be processed: " + reasonMsg);
+                return toResponse(booking, false,
+                        "Cancellation failed — refund could not be processed: " + reasonMsg, tenant, owner);
             }
         } catch (WalletServiceUnavailableException e) {
             log.warn("Booking refund failed — service unavailable: id={}, reason={}", booking.getId(), e.getMessage());
@@ -216,26 +232,64 @@ public class BookingService {
 
         log.info("Booking cancelled: id={}, cancelledBy={}", booking.getId(), userId);
 
-        return toResponse(booking, true, "Booking cancelled and refund processed.");
+        return toResponse(booking, true, "Booking cancelled and refund processed.", tenant, owner);
     }
 
     // ====================== QUERIES ======================
 
-    public Page<Booking> getMyBookingsAsTenant(String tenantId, BookingStatus status, Pageable pageable) {
-        return status != null
+    /**
+     * The caller's own bookings as tenant. The caller's own profile is
+     * fetched once (they're the tenant on every item); the owner varies
+     * per booking, so owners are fetched per distinct ownerId within the
+     * page (deduplicated via a page-scoped cache) rather than once per
+     * item — still one auth-service call per unique owner in the worst
+     * case, since there's no batch-lookup-by-ids endpoint available.
+     */
+    public Page<BookingResponse> getMyBookingsAsTenant(String tenantId, BookingStatus status, String authHeader, Pageable pageable) {
+        UserSummaryResponse tenant = authServiceClient.getCurrentUser(authHeader);
+        if (tenant == null || !tenant.getId().equals(tenantId)) {
+            throw new AuthenticationFailedException("User authentication failed. Please log in again.");
+        }
+
+        Map<String, UserSummaryResponse> ownerCache = new HashMap<>();
+        Page<Booking> page = status != null
                 ? bookingRepository.findByTenantIdAndStatus(tenantId, status, pageable)
                 : bookingRepository.findByTenantId(tenantId, pageable);
+
+        return page.map(booking -> {
+            UserSummaryResponse owner = ownerCache.computeIfAbsent(
+                    booking.getOwnerId(), id -> authServiceClient.getUserSummary(id, authHeader));
+            return toResponse(booking, true, null, tenant, owner);
+        });
     }
 
-    public Page<Booking> getMyBookingsAsOwner(String ownerId, BookingStatus status, Pageable pageable) {
-        return status != null
+    /**
+     * Bookings received on the caller's own listings (as owner). Same
+     * fetch-once-for-the-caller, deduplicate-the-other-party pattern as
+     * getMyBookingsAsTenant, mirrored.
+     */
+    public Page<BookingResponse> getMyBookingsAsOwner(String ownerId, BookingStatus status, String authHeader, Pageable pageable) {
+        UserSummaryResponse owner = authServiceClient.getCurrentUser(authHeader);
+        if (owner == null || !owner.getId().equals(ownerId)) {
+            throw new AuthenticationFailedException("User authentication failed. Please log in again.");
+        }
+
+        Map<String, UserSummaryResponse> tenantCache = new HashMap<>();
+        Page<Booking> page = status != null
                 ? bookingRepository.findByOwnerIdAndStatus(ownerId, status, pageable)
                 : bookingRepository.findByOwnerId(ownerId, pageable);
+
+        return page.map(booking -> {
+            UserSummaryResponse tenant = tenantCache.computeIfAbsent(
+                    booking.getTenantId(), id -> authServiceClient.getUserSummary(id, authHeader));
+            return toResponse(booking, true, null, tenant, owner);
+        });
     }
 
     // ====================== HELPERS ======================
 
-    private BookingResponse toResponse(Booking booking, boolean success, String message) {
+    private BookingResponse toResponse(Booking booking, boolean success, String message,
+                                        UserSummaryResponse tenant, UserSummaryResponse owner) {
         return new BookingResponse(
                 booking.getId(),
                 booking.getListingId(),
@@ -246,7 +300,9 @@ public class BookingService {
                 booking.getCurrency(),
                 booking.getStatus(),
                 message,
-                success
+                success,
+                tenant,
+                owner
         );
     }
 }

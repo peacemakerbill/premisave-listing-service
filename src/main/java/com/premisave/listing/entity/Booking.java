@@ -29,9 +29,13 @@ public class Booking extends BaseEntity {
 
     @Indexed
     private String tenantId;   // the customer who booked
+    private String tenantEmail; // stable, stored as a convenience reference —
+                                 // full name/phone/etc. are never stored,
+                                 // always fetched live from auth-service
 
     @Indexed
     private String ownerId;    // the listing's owner, copied for query convenience
+    private String ownerEmail; // same reasoning as tenantEmail
 
     private LocalDateTime checkIn;
     private LocalDateTime checkOut;

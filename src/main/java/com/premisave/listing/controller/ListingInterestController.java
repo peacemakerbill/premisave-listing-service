@@ -21,8 +21,9 @@ public class ListingInterestController {
 
     /**
      * Express interest in a listing (long-term rental, lease, house sale,
-     * land sale) — no money involved, just records the customer's contact
-     * details so the owner can reach out.
+     * land sale) — no money involved. The customer's contact details are
+     * NOT submitted here; they're fetched from auth-service using the
+     * authenticated userId.
      */
     @PostMapping
     public ResponseEntity<InterestResponse> expressInterest(
@@ -50,7 +51,7 @@ public class ListingInterestController {
             @RequestHeader("Authorization") String authorization,
             Pageable pageable) {
         String customerId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(interestService.getMyInterests(customerId, pageable));
+        return ResponseEntity.ok(interestService.getMyInterests(customerId, authorization, pageable));
     }
 
     /** Leads received on the caller's own listings (as owner). */
@@ -59,6 +60,6 @@ public class ListingInterestController {
             @RequestHeader("Authorization") String authorization,
             Pageable pageable) {
         String ownerId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(interestService.getInterestsForMyListings(ownerId, pageable));
+        return ResponseEntity.ok(interestService.getInterestsForMyListings(ownerId, authorization, pageable));
     }
 }

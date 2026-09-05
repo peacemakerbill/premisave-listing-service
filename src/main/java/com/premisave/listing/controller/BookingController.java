@@ -2,7 +2,6 @@ package com.premisave.listing.controller;
 
 import com.premisave.listing.dto.BookingRequest;
 import com.premisave.listing.dto.BookingResponse;
-import com.premisave.listing.entity.Booking;
 import com.premisave.listing.enums.BookingStatus;
 import com.premisave.listing.service.BookingService;
 import com.premisave.listing.util.JwtUtil;
@@ -50,15 +49,16 @@ public class BookingController {
     /**
      * The caller's own bookings as a tenant, optionally filtered by status
      * (e.g. ?status=CONFIRMED for active bookings, ?status=CANCELLED for
-     * cancelled ones).
+     * cancelled ones). Each item includes live tenant/owner details fetched
+     * from auth-service.
      */
     @GetMapping("/me")
-    public ResponseEntity<Page<Booking>> getMyBookings(
+    public ResponseEntity<Page<BookingResponse>> getMyBookings(
             @RequestParam(required = false) BookingStatus status,
             @RequestHeader("Authorization") String authorization,
             Pageable pageable) {
         String tenantId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(bookingService.getMyBookingsAsTenant(tenantId, status, pageable));
+        return ResponseEntity.ok(bookingService.getMyBookingsAsTenant(tenantId, status, authorization, pageable));
     }
 
     /**
@@ -66,11 +66,11 @@ public class BookingController {
      * filtered by status.
      */
     @GetMapping("/received")
-    public ResponseEntity<Page<Booking>> getReceivedBookings(
+    public ResponseEntity<Page<BookingResponse>> getReceivedBookings(
             @RequestParam(required = false) BookingStatus status,
             @RequestHeader("Authorization") String authorization,
             Pageable pageable) {
         String ownerId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(bookingService.getMyBookingsAsOwner(ownerId, status, pageable));
+        return ResponseEntity.ok(bookingService.getMyBookingsAsOwner(ownerId, status, authorization, pageable));
     }
 }
