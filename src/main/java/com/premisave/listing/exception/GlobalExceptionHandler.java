@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -110,6 +111,23 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<String>> handleNotFoundException(NotFoundException ex) {
         log.warn("Resource not found: {}", ex.getMessage());
         ApiResponse<String> response = new ApiResponse<>(false, ex.getMessage(), null);
+        return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    }
+
+    /**
+     * No controller mapping matched the request at all (wrong path, wrong
+     * HTTP method, or a sub-path missing — e.g. GET /interests instead of
+     * /interests/me). Spring's DispatcherServlet falls back to treating
+     * unmatched GET requests as static-resource lookups, so this used to
+     * surface as a confusing 500 "Unexpected error: NoResourceFoundException
+     * — No static resource X" via the generic catch-all below, rather than
+     * the plain 404 this actually is.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<String>> handleNoResourceFoundException(NoResourceFoundException ex) {
+        log.warn("No matching endpoint: {} {}", ex.getHttpMethod(), ex.getResourcePath());
+        ApiResponse<String> response = new ApiResponse<>(
+            false, "No such endpoint: " + ex.getHttpMethod() + " /" + ex.getResourcePath(), null);
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
     }
 
