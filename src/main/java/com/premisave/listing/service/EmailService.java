@@ -1,28 +1,40 @@
 package com.premisave.listing.service;
 
 import com.premisave.listing.entity.Booking;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
  * All notification emails for bookings and listing interest, sent to both
  * parties (tenant/customer and listing owner) for every state change.
  *
+ * Renders HTML via Thymeleaf templates under
+ * src/main/resources/templates/email/ — the TemplateEngine bean here is
+ * the same one Spring Boot's Thymeleaf autoconfiguration already provides
+ * for MVC views (added via spring-boot-starter-thymeleaf); reusing it for
+ * email rendering is a standard pattern and needs no extra configuration,
+ * since template resolution already defaults to classpath:/templates/
+ * with an .html suffix — exactly where these templates live.
+ *
+ * Visual design matches wallet-service's own transactional email templates
+ * (navy header, icon-badge headline, feature card, detail-row table,
+ * footer) for a consistent look across Premisave's emails.
+ *
  * @Async so a slow or failing SMTP call never blocks or breaks the
  * underlying action — by the time any of these run, the booking/refund/
  * interest record has already been saved, so a failed email is logged and
- * swallowed rather than propagated (see send()).
- *
- * Uses plain-text SimpleMailMessage rather than HTML templates for this
- * first pass — deliberately simple; swap in a templating engine
- * (Thymeleaf, FreeMarker) later if richer formatting is wanted.
+ * swallowed rather than propagated (see sendHtml()).
  */
 @Slf4j
 @Service
@@ -30,11 +42,13 @@ import java.time.format.DateTimeFormatter;
 public class EmailService {
 
     private final JavaMailSender mailSender;
+    private final TemplateEngine templateEngine;
 
-    @Value("${mail-from}")
+    @Value("${mail-from:no-reply@premisave.com}")
     private String fromAddress;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d yyyy");
+    private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d yyyy, h:mm a");
 
     // ====================== BOOKING ======================
 
@@ -42,24 +56,34 @@ public class EmailService {
     public void sendBookingConfirmedEmails(String tenantEmail, String tenantName,
                                             String ownerEmail, String ownerName,
                                             String listingTitle, Booking booking) {
-        String dates = booking.getCheckIn().format(DATE_FORMAT) + " to " + booking.getCheckOut().format(DATE_FORMAT);
+        String checkIn = booking.getCheckIn().format(DATE_FORMAT);
+        String checkOut = booking.getCheckOut().format(DATE_FORMAT);
+        String timestamp = now();
+        String reference = booking.getPaymentReference();
 
-        send(tenantEmail,
-            "Booking confirmed: " + listingTitle,
-            greeting(tenantName) +
-            "You have made a booking for \"" + listingTitle + "\" (" + dates + "). " +
-            "Total charged: " + booking.getCurrency() + " " + booking.getTotalAmount() + ".\n\n" +
-            "Thanks for booking with Premisave!"
-        );
+        Context tenantCtx = new Context();
+        tenantCtx.setVariable("recipientName", displayName(tenantName));
+        tenantCtx.setVariable("listingTitle", listingTitle);
+        tenantCtx.setVariable("checkIn", checkIn);
+        tenantCtx.setVariable("checkOut", checkOut);
+        tenantCtx.setVariable("currency", booking.getCurrency());
+        tenantCtx.setVariable("totalAmount", booking.getTotalAmount());
+        tenantCtx.setVariable("timestamp", timestamp);
+        tenantCtx.setVariable("reference", reference);
+        sendHtml(tenantEmail, "Booking confirmed: " + listingTitle, "email/booking-confirmed-tenant", tenantCtx);
 
         if (ownerEmail != null) {
-            send(ownerEmail,
-                "New booking: " + listingTitle,
-                greeting(ownerName) +
-                (tenantName != null ? tenantName : "A customer") + " has booked \"" + listingTitle + "\" (" + dates + "). " +
-                "Payment of " + booking.getCurrency() + " " + booking.getTotalAmount() + " has been sent to your wallet.\n\n" +
-                "— Premisave"
-            );
+            Context ownerCtx = new Context();
+            ownerCtx.setVariable("recipientName", displayName(ownerName));
+            ownerCtx.setVariable("otherPartyName", displayName(tenantName));
+            ownerCtx.setVariable("listingTitle", listingTitle);
+            ownerCtx.setVariable("checkIn", checkIn);
+            ownerCtx.setVariable("checkOut", checkOut);
+            ownerCtx.setVariable("currency", booking.getCurrency());
+            ownerCtx.setVariable("totalAmount", booking.getTotalAmount());
+            ownerCtx.setVariable("timestamp", timestamp);
+            ownerCtx.setVariable("reference", reference);
+            sendHtml(ownerEmail, "New booking: " + listingTitle, "email/booking-confirmed-owner", ownerCtx);
         }
     }
 
@@ -67,23 +91,28 @@ public class EmailService {
     public void sendBookingCancelledEmails(String tenantEmail, String tenantName,
                                             String ownerEmail, String ownerName,
                                             String listingTitle, Booking booking) {
-        send(tenantEmail,
-            "Booking cancelled: " + listingTitle,
-            greeting(tenantName) +
-            "Your booking for \"" + listingTitle + "\" has been cancelled and " +
-            booking.getCurrency() + " " + booking.getTotalAmount() + " has been refunded to your wallet.\n\n" +
-            "— Premisave"
-        );
+        String timestamp = now();
+        String reference = booking.getRefundReference();
+
+        Context tenantCtx = new Context();
+        tenantCtx.setVariable("recipientName", displayName(tenantName));
+        tenantCtx.setVariable("listingTitle", listingTitle);
+        tenantCtx.setVariable("currency", booking.getCurrency());
+        tenantCtx.setVariable("totalAmount", booking.getTotalAmount());
+        tenantCtx.setVariable("timestamp", timestamp);
+        tenantCtx.setVariable("reference", reference);
+        sendHtml(tenantEmail, "Booking cancelled: " + listingTitle, "email/booking-cancelled-tenant", tenantCtx);
 
         if (ownerEmail != null) {
-            send(ownerEmail,
-                "Booking cancelled: " + listingTitle,
-                greeting(ownerName) +
-                "The booking for \"" + listingTitle + "\" by " + (tenantName != null ? tenantName : "a customer") +
-                " has been cancelled. " + booking.getCurrency() + " " + booking.getTotalAmount() +
-                " has been refunded from your wallet.\n\n" +
-                "— Premisave"
-            );
+            Context ownerCtx = new Context();
+            ownerCtx.setVariable("recipientName", displayName(ownerName));
+            ownerCtx.setVariable("otherPartyName", displayName(tenantName));
+            ownerCtx.setVariable("listingTitle", listingTitle);
+            ownerCtx.setVariable("currency", booking.getCurrency());
+            ownerCtx.setVariable("totalAmount", booking.getTotalAmount());
+            ownerCtx.setVariable("timestamp", timestamp);
+            ownerCtx.setVariable("reference", reference);
+            sendHtml(ownerEmail, "Booking cancelled: " + listingTitle, "email/booking-cancelled-owner", ownerCtx);
         }
     }
 
@@ -93,21 +122,21 @@ public class EmailService {
     public void sendInterestExpressedEmails(String customerEmail, String customerName,
                                              String ownerEmail, String ownerName,
                                              String listingTitle) {
-        send(customerEmail,
-            "You expressed interest in: " + listingTitle,
-            greeting(customerName) +
-            "You are interested in \"" + listingTitle + "\". The owner has been notified and may reach out to you directly.\n\n" +
-            "— Premisave"
-        );
+        String timestamp = now();
+
+        Context customerCtx = new Context();
+        customerCtx.setVariable("recipientName", displayName(customerName));
+        customerCtx.setVariable("listingTitle", listingTitle);
+        customerCtx.setVariable("timestamp", timestamp);
+        sendHtml(customerEmail, "You expressed interest in: " + listingTitle, "email/interest-expressed-customer", customerCtx);
 
         if (ownerEmail != null) {
-            send(ownerEmail,
-                "New interest in your listing: " + listingTitle,
-                greeting(ownerName) +
-                (customerName != null ? customerName : "A customer") + " is interested in \"" + listingTitle + "\". " +
-                "Check your listing's interest list for their contact details.\n\n" +
-                "— Premisave"
-            );
+            Context ownerCtx = new Context();
+            ownerCtx.setVariable("recipientName", displayName(ownerName));
+            ownerCtx.setVariable("otherPartyName", displayName(customerName));
+            ownerCtx.setVariable("listingTitle", listingTitle);
+            ownerCtx.setVariable("timestamp", timestamp);
+            sendHtml(ownerEmail, "New interest in your listing: " + listingTitle, "email/interest-expressed-owner", ownerCtx);
         }
     }
 
@@ -115,41 +144,50 @@ public class EmailService {
     public void sendInterestCancelledEmails(String customerEmail, String customerName,
                                              String ownerEmail, String ownerName,
                                              String listingTitle) {
-        send(customerEmail,
-            "Interest cancelled: " + listingTitle,
-            greeting(customerName) +
-            "You are no longer interested in \"" + listingTitle + "\". Your contact details have been removed from this listing.\n\n" +
-            "— Premisave"
-        );
+        String timestamp = now();
+
+        Context customerCtx = new Context();
+        customerCtx.setVariable("recipientName", displayName(customerName));
+        customerCtx.setVariable("listingTitle", listingTitle);
+        customerCtx.setVariable("timestamp", timestamp);
+        sendHtml(customerEmail, "Interest cancelled: " + listingTitle, "email/interest-cancelled-customer", customerCtx);
 
         if (ownerEmail != null) {
-            send(ownerEmail,
-                "Interest withdrawn: " + listingTitle,
-                greeting(ownerName) +
-                (customerName != null ? customerName : "A customer") + " is no longer interested in \"" + listingTitle + "\".\n\n" +
-                "— Premisave"
-            );
+            Context ownerCtx = new Context();
+            ownerCtx.setVariable("recipientName", displayName(ownerName));
+            ownerCtx.setVariable("otherPartyName", displayName(customerName));
+            ownerCtx.setVariable("listingTitle", listingTitle);
+            ownerCtx.setVariable("timestamp", timestamp);
+            sendHtml(ownerEmail, "Interest withdrawn: " + listingTitle, "email/interest-cancelled-owner", ownerCtx);
         }
     }
 
     // ====================== HELPERS ======================
 
-    private String greeting(String name) {
-        return "Hi " + (name != null && !name.isBlank() ? name : "there") + ",\n\n";
+    private String now() {
+        return LocalDateTime.now().format(TIMESTAMP_FORMAT);
     }
 
-    private void send(String to, String subject, String body) {
+    private String displayName(String name) {
+        return (name != null && !name.isBlank()) ? name : "there";
+    }
+
+    private void sendHtml(String to, String subject, String templateName, Context context) {
         if (to == null || to.isBlank()) {
             log.warn("Skipped sending email '{}' — no recipient address available.", subject);
             return;
         }
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromAddress);
-            message.setTo(to);
-            message.setSubject(subject);
-            message.setText(body);
-            mailSender.send(message);
+            String html = templateEngine.process(templateName, context);
+
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+
+            mailSender.send(mimeMessage);
             log.info("Email sent: to={}, subject={}", to, subject);
         } catch (Exception e) {
             // Never let an email failure break the underlying booking/interest
