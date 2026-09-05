@@ -67,6 +67,12 @@
       "defaultValue": "0 */5 * * * *"
     },
     {
+      "name": "booking.completion-check-cron",
+      "type": "java.lang.String",
+      "description": "Cron expression controlling how often BookingService checks for CONFIRMED bookings past their checkOut date and marks them COMPLETED. Standard 6-field Spring cron.",
+      "defaultValue": "0 */5 * * * *"
+    },
+    {
       "name": "frankfurter.base-url",
       "type": "java.lang.String",
       "description": "Base URL for the Frankfurter currency exchange rate API. Display-only conversion now — actual payment settlement happens in wallet-service.",

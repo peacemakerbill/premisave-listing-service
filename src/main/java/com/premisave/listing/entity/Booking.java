@@ -20,7 +20,11 @@ import java.time.LocalDateTime;
 @CompoundIndexes({
         // Backs the overlap-conflict check in BookingService — one listing,
         // date range, and status queried together on every booking attempt.
-        @CompoundIndex(name = "listing_dates_status_idx", def = "{'listingId': 1, 'checkIn': 1, 'checkOut': 1, 'status': 1}")
+        @CompoundIndex(name = "listing_dates_status_idx", def = "{'listingId': 1, 'checkIn': 1, 'checkOut': 1, 'status': 1}"),
+        // Backs the scheduled completion sweep (findByStatusAndCheckOutBefore)
+        // — a cross-listing query, so it needs its own index rather than
+        // reusing the one above, which leads with listingId.
+        @CompoundIndex(name = "status_checkout_idx", def = "{'status': 1, 'checkOut': 1}")
 })
 public class Booking extends BaseEntity {
 

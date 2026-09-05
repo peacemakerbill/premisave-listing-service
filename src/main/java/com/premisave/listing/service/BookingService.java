@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -233,6 +234,41 @@ public class BookingService {
         log.info("Booking cancelled: id={}, cancelledBy={}", booking.getId(), userId);
 
         return toResponse(booking, true, "Booking cancelled and refund processed.", tenant, owner);
+    }
+
+    // ====================== SCHEDULED: COMPLETE PAST BOOKINGS ======================
+
+    /**
+     * Data-hygiene job, not a correctness fix — the overlap-conflict check
+     * in createBooking already works correctly without this, since a past
+     * booking's date range can never overlap a future request purely by
+     * date comparison, regardless of status. What this actually fixes:
+     * without it, a CONFIRMED booking from months ago stays "CONFIRMED"
+     * forever, which pollutes any "my active bookings" view and blocks a
+     * future reviews feature that needs a clean "this stay actually
+     * happened" signal.
+     *
+     * Mirrors AdPromotionService.deactivateExpiredPromotions — same
+     * configurable-cron pattern, same "only touch what actually needs it"
+     * query shape. Runs every 5 minutes by default, configurable via
+     * booking.completion-check-cron in application.yml.
+     */
+    @Scheduled(cron = "${booking.completion-check-cron:0 */5 * * * *}")
+    @Transactional
+    public void completeExpiredBookings() {
+        log.info("Scheduled task: checking for bookings past checkout...");
+
+        List<Booking> expired = bookingRepository.findByStatusAndCheckOutBefore(
+                BookingStatus.CONFIRMED, LocalDateTime.now());
+
+        for (Booking booking : expired) {
+            booking.setStatus(BookingStatus.COMPLETED);
+            bookingRepository.save(booking);
+        }
+
+        if (!expired.isEmpty()) {
+            log.info("Marked {} booking(s) as completed.", expired.size());
+        }
     }
 
     // ====================== QUERIES ======================

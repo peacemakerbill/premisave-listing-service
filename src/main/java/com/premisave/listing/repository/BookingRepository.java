@@ -32,4 +32,14 @@ public interface BookingRepository extends MongoRepository<Booking, String> {
     @Query("{ 'listingId': ?0, 'status': { $in: ['PENDING', 'CONFIRMED'] }, "
             + "'checkIn': { $lt: ?2 }, 'checkOut': { $gt: ?1 } }")
     List<Booking> findOverlapping(String listingId, LocalDateTime checkIn, LocalDateTime checkOut);
+
+    /**
+     * Backs the scheduled completion sweep — CONFIRMED bookings whose
+     * checkOut has passed. Cross-listing (no listingId filter), so this
+     * relies on Booking's separate (status, checkOut) compound index
+     * rather than the overlap query's (listingId, checkIn, checkOut,
+     * status) one, which leads with listingId and wouldn't serve this
+     * efficiently.
+     */
+    List<Booking> findByStatusAndCheckOutBefore(BookingStatus status, LocalDateTime checkOut);
 }
