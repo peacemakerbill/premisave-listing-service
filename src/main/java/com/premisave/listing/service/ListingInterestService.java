@@ -28,11 +28,12 @@ import java.util.Map;
  * Deliberately stores almost nothing about people: only stable IDs
  * (customerId, customerEmail) live on ListingInterest. Every response
  * embeds a full UserSummaryResponse fetched live from auth-service via
- * AuthServiceClient — never a stored snapshot, since names/phone/address/
- * profile picture can all change and a cached copy would silently go
- * stale. If auth-service is unreachable, AuthServiceClientFallbackFactory
- * throws AuthServiceUnavailableException, which propagates straight
- * through every method here (nothing catches it) to GlobalExceptionHandler,
+ * AuthServiceClient — never a stored snapshot. Only the OTHER party
+ * relevant to whoever's viewing is included (see InterestResponse) —
+ * the caller already knows their own details. If auth-service is
+ * unreachable, AuthServiceClientFallbackFactory throws
+ * AuthServiceUnavailableException, which propagates straight through
+ * every method here (nothing catches it) to GlobalExceptionHandler,
  * giving the caller a clean 503 instead of a stale or missing response.
  */
 @Slf4j
@@ -79,7 +80,10 @@ public class ListingInterestService {
 
         log.info("Interest expressed: listing={}, customer={}", listing.getId(), customerId);
 
-        return toResponse(interest, customer);
+        // Caller is the customer — they know their own details, so the
+        // useful thing to hand back is who they'd actually be dealing
+        // with (the owner), not an echo of their own profile.
+        return toResponse(interest, null, owner);
     }
 
     @Transactional
@@ -107,26 +111,36 @@ public class ListingInterestService {
     }
 
     /**
-     * The caller's own expressed interests. Every item belongs to the same
-     * customer (the caller), so their profile is fetched exactly once,
-     * not once per item.
+     * The caller's own expressed interests, viewed as the customer — each
+     * item embeds the LISTING OWNER's details (who they'd actually be
+     * dealing with), never the caller's own. Owners vary per item (each
+     * interest can point to a different listing), so they're fetched per
+     * distinct ownerId within the page (deduplicated via a page-scoped
+     * cache) rather than once per item.
      */
     public Page<InterestResponse> getMyInterests(String customerId, String authHeader, Pageable pageable) {
         UserSummaryResponse customer = authServiceClient.getCurrentUser(authHeader);
         if (customer == null || !customer.getId().equals(customerId)) {
             throw new AuthenticationFailedException("User authentication failed. Please log in again.");
         }
+
+        Map<String, UserSummaryResponse> ownerCache = new HashMap<>();
         return interestRepository.findByCustomerId(customerId, pageable)
-                .map(interest -> toResponse(interest, customer));
+                .map(interest -> {
+                    UserSummaryResponse owner = ownerCache.computeIfAbsent(
+                            interest.getListingOwnerId(),
+                            id -> authServiceClient.getUserSummary(id, authHeader));
+                    return toResponse(interest, null, owner);
+                });
     }
 
     /**
-     * The owner's received leads across all their listings. Unlike
-     * getMyInterests, each item can belong to a DIFFERENT customer, so
-     * this fetches per distinct customer within the page (deduplicated via
-     * a page-scoped map) rather than once overall — still one auth-service
-     * call per unique customer in the worst case, since there's no
-     * batch-lookup-by-ids endpoint to fetch them all at once.
+     * The owner's received leads across all their listings — each item
+     * embeds the CUSTOMER's details (the lead's contact info), never the
+     * owner's own. Unlike getMyInterests, each item can belong to a
+     * DIFFERENT customer, so this fetches per distinct customer within
+     * the page — still one auth-service call per unique customer in the
+     * worst case, since there's no batch-lookup-by-ids endpoint.
      */
     public Page<InterestResponse> getInterestsForMyListings(String ownerId, String authHeader, Pageable pageable) {
         Map<String, UserSummaryResponse> customerCache = new HashMap<>();
@@ -135,18 +149,19 @@ public class ListingInterestService {
                     UserSummaryResponse customer = customerCache.computeIfAbsent(
                             interest.getCustomerId(),
                             id -> authServiceClient.getUserSummary(id, authHeader));
-                    return toResponse(interest, customer);
+                    return toResponse(interest, customer, null);
                 });
     }
 
-    private InterestResponse toResponse(ListingInterest interest, UserSummaryResponse customer) {
+    private InterestResponse toResponse(ListingInterest interest, UserSummaryResponse customer, UserSummaryResponse owner) {
         return new InterestResponse(
                 interest.getId(),
                 interest.getListingId(),
                 interest.getListingTitle(),
                 interest.getMessage(),
                 interest.getCreatedAt(),
-                customer
+                customer,
+                owner
         );
     }
 }
