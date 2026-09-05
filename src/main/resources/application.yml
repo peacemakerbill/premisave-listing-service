@@ -116,10 +116,51 @@ cloudinary:
 # ==================== Rate Limiting ====================
 # Per-key (user, falling back to IP) limit, enforced against a Redis-backed
 # bucket so every instance agrees on the same count. See RateLimiterConfig /
-# RateLimiterInterceptor — this used to be a single bucket shared by every
-# user on the instance.
+# Distributed, per-identity, per-tier rate limiting (RateLimiterConfig /
+# RateLimiterInterceptor) — Redis-backed via Bucket4j's Lettuce
+# integration, so the limit is correctly shared across however many
+# instances of this service run behind a load balancer, and each
+# user/IP has an independent budget per tier below.
+#
+# Tune these here, no code change needed. Numbers below are a starting
+# point, not a guarantee — watch real traffic and adjust:
+#   default:   generous, for ordinary browsing/reading (search, view a
+#              listing, currency rates) — high enough that a frontend
+#              making several calls per page load never gets throttled
+#   write:     moderate, for creating/editing listings — a host managing
+#              several listings in one session is fine, automated
+#              listing-spam is not
+#   sensitive: strict, for anything that moves money or generates a lead
+#              a human contacts (bookings, cancellations, promotions,
+#              expressing interest) — a legitimate user rarely does more
+#              than a couple of these per minute, and this is exactly
+#              the category fraud/spam patterns (rapid book-then-cancel
+#              cycles, flooding owners with fake leads) show up in
 rate-limit:
-  requests-per-minute: 100
+  enabled: true
+  default-tier:
+    capacity: 300
+    refill-tokens: 300
+    refill-period-seconds: 60
+  write-tier:
+    capacity: 30
+    refill-tokens: 30
+    refill-period-seconds: 60
+  sensitive-tier:
+    capacity: 10
+    refill-tokens: 10
+    refill-period-seconds: 60
+  sensitive-paths:
+    - "POST:/bookings"
+    - "POST:/bookings/*/cancel"
+    - "POST:/listings/promote"
+    - "POST:/listings/*/extend"
+    - "POST:/interests"
+    - "DELETE:/interests/*"
+  write-paths:
+    - "POST:/listings"
+    - "PUT:/listings/*"
+    - "DELETE:/listings/*"
 
 # ==================== Ad Promotion ====================
 ad:

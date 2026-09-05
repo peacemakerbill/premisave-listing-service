@@ -1,6 +1,76 @@
 {
   "properties": [
     {
+      "name": "rate-limit.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Global kill switch for the Redis-backed rate limiter (RateLimiterInterceptor). Set false to disable entirely, e.g. for local dev without Redis running.",
+      "defaultValue": true
+    },
+    {
+      "name": "rate-limit.default-tier.capacity",
+      "type": "java.lang.Integer",
+      "description": "Max tokens (requests) the default tier's bucket can hold. Applies to any endpoint not matched by sensitive-paths or write-paths — ordinary browsing/reading (search, view a listing, currency rates).",
+      "defaultValue": 300
+    },
+    {
+      "name": "rate-limit.default-tier.refill-tokens",
+      "type": "java.lang.Integer",
+      "description": "Tokens added back to the default tier's bucket every refill-period-seconds.",
+      "defaultValue": 300
+    },
+    {
+      "name": "rate-limit.default-tier.refill-period-seconds",
+      "type": "java.lang.Integer",
+      "description": "How often (in seconds) the default tier's bucket refills by refill-tokens.",
+      "defaultValue": 60
+    },
+    {
+      "name": "rate-limit.write-tier.capacity",
+      "type": "java.lang.Integer",
+      "description": "Max tokens the write tier's bucket can hold. Applies to endpoints listed in write-paths — creating/editing/deleting listings.",
+      "defaultValue": 30
+    },
+    {
+      "name": "rate-limit.write-tier.refill-tokens",
+      "type": "java.lang.Integer",
+      "description": "Tokens added back to the write tier's bucket every refill-period-seconds.",
+      "defaultValue": 30
+    },
+    {
+      "name": "rate-limit.write-tier.refill-period-seconds",
+      "type": "java.lang.Integer",
+      "description": "How often (in seconds) the write tier's bucket refills by refill-tokens.",
+      "defaultValue": 60
+    },
+    {
+      "name": "rate-limit.sensitive-tier.capacity",
+      "type": "java.lang.Integer",
+      "description": "Max tokens the sensitive tier's bucket can hold. Applies to endpoints listed in sensitive-paths — anything that moves money or generates a lead a human contacts (bookings, cancellations, promotions, expressing interest). Deliberately the strictest tier, since these are exactly the actions fraud/spam patterns target.",
+      "defaultValue": 10
+    },
+    {
+      "name": "rate-limit.sensitive-tier.refill-tokens",
+      "type": "java.lang.Integer",
+      "description": "Tokens added back to the sensitive tier's bucket every refill-period-seconds.",
+      "defaultValue": 10
+    },
+    {
+      "name": "rate-limit.sensitive-tier.refill-period-seconds",
+      "type": "java.lang.Integer",
+      "description": "How often (in seconds) the sensitive tier's bucket refills by refill-tokens.",
+      "defaultValue": 60
+    },
+    {
+      "name": "rate-limit.sensitive-paths",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Endpoints checked against the sensitive tier, as 'METHOD:ant-pattern' entries (e.g. 'POST:/bookings/*/cancel'). Checked before write-paths, first match wins; unmatched requests fall into the default tier."
+    },
+    {
+      "name": "rate-limit.write-paths",
+      "type": "java.util.List<java.lang.String>",
+      "description": "Endpoints checked against the write tier, as 'METHOD:ant-pattern' entries (e.g. 'PUT:/listings/*'). Checked after sensitive-paths; unmatched requests fall into the default tier."
+    },
+    {
       "name": "auth.service.url",
       "type": "java.lang.String",
       "description": "Base URL of the authentication service."
@@ -41,12 +111,6 @@
       "name": "cloudinary.api-secret",
       "type": "java.lang.String",
       "description": "Cloudinary API secret."
-    },
-    {
-      "name": "rate-limit.requests-per-minute",
-      "type": "java.lang.Integer",
-      "description": "Maximum number of requests allowed per minute per user (or per IP if unauthenticated) before rate limiting kicks in. Enforced against a Redis-backed bucket shared across all instances.",
-      "defaultValue": 100
     },
     {
       "name": "ad.promotion.daily-rate",
