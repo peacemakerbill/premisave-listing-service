@@ -1,5 +1,6 @@
 package com.premisave.listing.controller;
 
+import com.premisave.listing.dto.ApiResponse;
 import com.premisave.listing.dto.ExpressInterestRequest;
 import com.premisave.listing.dto.InterestResponse;
 import com.premisave.listing.service.ListingInterestService;
@@ -37,12 +38,12 @@ public class ListingInterestController {
      * Cancel (permanently delete) a previously expressed interest.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<String> cancelInterest(
+    public ResponseEntity<ApiResponse<String>> cancelInterest(
             @PathVariable String id,
             @RequestHeader("Authorization") String authorization) {
         String customerId = jwtUtil.extractUserId(authorization);
         interestService.cancelInterest(id, customerId, authorization);
-        return ResponseEntity.ok("Interest cancelled.");
+        return ResponseEntity.ok(new ApiResponse<>(true, "Interest cancelled.", null));
     }
 
     /** The caller's own expressed interests (as a customer). */
