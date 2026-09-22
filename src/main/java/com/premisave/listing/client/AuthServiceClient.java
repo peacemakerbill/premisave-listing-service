@@ -24,7 +24,7 @@ public interface AuthServiceClient {
                                        @RequestHeader("Authorization") String token);
 
     @GetMapping("/profile/search")
-    List<UserSummaryResponse> searchUsers(@RequestParam("query") String query, 
+    List<UserSummaryResponse> searchUsers(@RequestParam String query, 
                                           @RequestHeader("Authorization") String token);
 
     @GetMapping("/profile/all")

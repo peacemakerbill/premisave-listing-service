@@ -251,7 +251,7 @@ public class ListingController {
     @PostMapping("/upload-images")
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<List<String>> uploadImages(
-            @RequestParam("files") List<MultipartFile> files,
+            @RequestParam List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
         validateImageFiles(files);
         return ResponseEntity.ok(listingService.uploadImages(files));

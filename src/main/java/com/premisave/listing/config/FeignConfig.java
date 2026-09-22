@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class FeignConfig {
 
     @Bean
-    public RequestInterceptor requestInterceptor(JwtFeignInterceptor jwtFeignInterceptor) {
+    RequestInterceptor requestInterceptor(JwtFeignInterceptor jwtFeignInterceptor) {
         return jwtFeignInterceptor;
     }
 }

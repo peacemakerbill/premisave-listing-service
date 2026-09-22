@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
 public class WalletFeignConfig {
 
     @Bean
-    public RequestInterceptor walletApiKeyRequestInterceptor(WalletApiKeyFeignInterceptor interceptor) {
+    RequestInterceptor walletApiKeyRequestInterceptor(WalletApiKeyFeignInterceptor interceptor) {
         return interceptor;
     }
 }

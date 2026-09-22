@@ -4,7 +4,7 @@ import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.distributed.ExpirationAfterWriteStrategy;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
-import io.github.bucket4j.redis.lettuce.cas.LettuceBasedProxyManager;
+import io.github.bucket4j.redis.lettuce.Bucket4jLettuce;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -47,9 +47,8 @@ public class RateLimiterConfig {
     private RedisClient redisClient;
     private StatefulRedisConnection<String, byte[]> redisConnection;
 
-    @SuppressWarnings("deprecation")
-	@Bean
-    public ProxyManager<String> bucketProxyManager() {
+    @Bean
+    ProxyManager<String> bucketProxyManager() {
         redisClient = RedisClient.create(RedisURI.builder()
                 .withHost(redisHost)
                 .withPort(redisPort)
@@ -57,12 +56,12 @@ public class RateLimiterConfig {
 
         redisConnection = redisClient.connect(RedisCodec.of(StringCodec.UTF8, ByteArrayCodec.INSTANCE));
 
-        return LettuceBasedProxyManager.builderFor(redisConnection)
+        return Bucket4jLettuce.casBasedBuilder(redisConnection)
                 // Lets a bucket's Redis key expire shortly after it would
                 // naturally have refilled to full capacity, rather than
                 // living forever — avoids an ever-growing set of stale
                 // per-user/per-IP keys for callers who stop making requests.
-                .withExpirationStrategy(
+                .expirationAfterWrite(
                         ExpirationAfterWriteStrategy.basedOnTimeForRefillingBucketUpToMax(Duration.ofMinutes(10)))
                 .build();
     }
