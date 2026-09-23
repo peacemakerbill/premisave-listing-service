@@ -2,30 +2,30 @@ spring:
   application:
     name: premisave-listing-service
 
-  # Java 21 virtual threads — cheap mitigation for blocking calls (RestTemplate
-  # to Frankfurter, Feign to auth-service/wallet-service) so they stop pinning
-  # platform threads under load. Does not replace the circuit breakers below —
-  # it just makes blocking cheaper while they're not tripped.
+  # Connection properties (uri/host/port/database/username/password) moved
+  # here from spring.data.mongodb.* in Boot 4 — confirmed via Boot's own
+  # 4.0 configuration changelog.
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017/premisave-listing}
+
   threads:
     virtual:
       enabled: true
 
   data:
     mongodb:
-      uri: ${MONGODB_URI:mongodb://localhost:27017/premisave-listing}
-      # Lets @Indexed / @CompoundIndex annotations actually create indexes on
-      # startup. Fine for dev and for collections that are still small. On an
-      # existing production collection with real data volume, building an
-      # index at startup can stall the app or lock the collection for the
-      # duration — prefer creating those indexes explicitly/out-of-band
-      # (e.g. via a migration script or `db.collection.createIndex` run
-      # ahead of a deploy) once there's real data, and turn this back off.
+      # auto-index-creation: kept under spring.data.mongodb.* — unlike uri
+      # below, I found no confirmation this one moved in Boot 4. Flag me if
+      # your IDE/build also marks this specific line as deprecated.
+      #
+      # Turn off once there's real production data — building an index at
+      # startup can stall the app or lock the collection.
       auto-index-creation: true
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       repositories:
-        enabled: false  # Prevents Redis from claiming MongoDB repositories
+        enabled: false  # prevents Redis from claiming MongoDB repositories
 
   servlet:
     multipart:
@@ -39,10 +39,14 @@ spring:
       circuitbreaker:
         enabled: true
 
-  # No defaults on host/port/username/password on purpose — same reasoning
-  # as INTERNAL_SERVICE_API_KEY/JWT_SECRET/Cloudinary below: fail loudly at
-  # startup if unset, rather than silently trying to send mail through a
-  # placeholder SMTP server.
+  # Selects the Jackson 2 ObjectMapper (from spring-boot-jackson2 in
+  # pom.xml) as the active bean — Boot 4 defaults to Jackson 3's JsonMapper,
+  # which SecurityConfig/RateLimiterInterceptor/Feign don't use.
+  http:
+    converters:
+      preferred-json-mapper: jackson2
+
+  # No defaults — fail at startup instead of silently using a placeholder SMTP server.
   mail:
     host: ${MAIL_HOST}
     port: ${MAIL_PORT}
@@ -55,87 +59,42 @@ spring:
           starttls:
             enable: true
 
-# The "From" address EmailService uses — not a Spring Boot-recognized mail
-# property (Spring's mail starter has no such setting), so it's its own
-# top-level key rather than nested under spring.mail.* to avoid implying
-# it's something Spring itself reads.
+# Not a real Spring Boot mail property — own key so it's not mistaken for one.
 mail-from: ${MAIL_FROM:no-reply@premisave.com}
 
-# ==================== Server ====================
 server:
   port: 8082
 
-# ==================== Auth Service ====================
 auth:
   service:
     url: ${AUTH_SERVICE_URL:http://localhost:8080}
 
-# ==================== Wallet Service ====================
-# All payment execution (M-Pesa, PayPal, Stripe, Flutterwave, NOWPayments)
-# now lives entirely in premisave-wallet-service. This service only calls
-# its internal, service-to-service endpoint to debit an existing wallet
-# balance — see WalletServiceClient / WalletApiKeyFeignInterceptor.
 wallet:
   service:
     url: ${WALLET_SERVICE_URL:http://localhost:8084}
 
-# One shared internal API key for service-to-service calls, meant to be
-# the exact same value across every Premisave microservice (not just
-# wallet-service — reuse this same property/value if listing-service ever
-# needs to authenticate calls FROM another service too). No default value
-# on purpose: a silently-wrong placeholder here caused a confusing 401 at
-# request time instead of a clear failure at startup. Missing this
-# property now fails the app on boot instead.
+# Shared across every Premisave microservice — same value everywhere. No
+# default: a wrong placeholder here caused a confusing 401 before.
 internal:
   service:
     api-key: ${INTERNAL_SERVICE_API_KEY}
 
-# ==================== Mail ====================
-# See spring.mail.* / mail-from at the top of this file, merged into the
-# existing top-level spring: block rather than duplicated here — a second
-# top-level spring: key in the same YAML file would silently clobber the
-# first one's settings (Mongo URI, virtual threads, Feign circuit breaker
-# config, etc.), which is exactly what this used to do before being fixed.
-
-# ==================== JWT ====================
-# No default on purpose — same reasoning as INTERNAL_SERVICE_API_KEY
-# above: a real-looking placeholder here means the app silently signs and
-# verifies tokens with a value anyone reading this file already has,
-# rather than failing loudly if you forget to set your own.
+# No default — a real-looking placeholder would sign/verify tokens with a
+# value anyone reading this file already has.
 jwt:
   secret: ${JWT_SECRET}
 
-# ==================== Cloudinary ====================
-# No defaults — these were previously real, working credentials
-# committed directly in this file. Set your own in .env.
+# No defaults — these were previously real, working credentials committed
+# directly in this file. Set your own in .env.
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME}
   api-key: ${CLOUDINARY_API_KEY}
   api-secret: ${CLOUDINARY_API_SECRET}
 
-# ==================== Rate Limiting ====================
-# Per-key (user, falling back to IP) limit, enforced against a Redis-backed
-# bucket so every instance agrees on the same count. See RateLimiterConfig /
-# Distributed, per-identity, per-tier rate limiting (RateLimiterConfig /
-# RateLimiterInterceptor) — Redis-backed via Bucket4j's Lettuce
-# integration, so the limit is correctly shared across however many
-# instances of this service run behind a load balancer, and each
-# user/IP has an independent budget per tier below.
-#
-# Tune these here, no code change needed. Numbers below are a starting
-# point, not a guarantee — watch real traffic and adjust:
-#   default:   generous, for ordinary browsing/reading (search, view a
-#              listing, currency rates) — high enough that a frontend
-#              making several calls per page load never gets throttled
-#   write:     moderate, for creating/editing listings — a host managing
-#              several listings in one session is fine, automated
-#              listing-spam is not
-#   sensitive: strict, for anything that moves money or generates a lead
-#              a human contacts (bookings, cancellations, promotions,
-#              expressing interest) — a legitimate user rarely does more
-#              than a couple of these per minute, and this is exactly
-#              the category fraud/spam patterns (rapid book-then-cancel
-#              cycles, flooding owners with fake leads) show up in
+# Redis-backed, per-identity (user, falling back to IP), per-tier. Tune
+# here, no code change needed. sensitive is strict on purpose — money-
+# moving or lead-generating actions (bookings, promotions, interests) are
+# exactly what fraud/spam patterns target.
 rate-limit:
   enabled: true
   default-tier:
@@ -162,47 +121,27 @@ rate-limit:
     - "PUT:/listings/*"
     - "DELETE:/listings/*"
 
-# ==================== Ad Promotion ====================
 ad:
   promotion:
     daily-rate: 2.99
     default-currency: USD
-    # Cron expression for the expired-promotion sweep
-    # (AdPromotionService.deactivateExpiredPromotions) — standard 6-field
-    # Spring cron (seconds minutes hours day-of-month month day-of-week).
-    # Defaults to every 5 minutes.
     expiry-check-cron: "0 */5 * * * *"
 
-# Cron expression for the past-checkout booking sweep
-# (BookingService.completeExpiredBookings) — same 6-field format as above.
-# Defaults to every 5 minutes.
 booking:
   completion-check-cron: "0 */5 * * * *"
 
-# ====================== FRANKFURTER CURRENCY API ======================
-# Display-only currency conversion for browsing listings. Actual payment
-# settlement is handled by wallet-service, which has its own FX layer.
 frankfurter:
   base-url: ${FRANKFURTER_BASE_URL:https://api.frankfurter.dev}
 
-# ==================== Frontend / CORS ====================
 frontend:
   url: ${FRONTEND_URL:http://localhost:3000}
 
 cors:
-  # Comma-separated list of allowed origins, e.g.
-  # "https://app.premisave.com,https://admin.premisave.com". Falls back to
-  # frontend.url above when unset (single-origin dev/local setups).
   allowed-origins: ${CORS_ALLOWED_ORIGINS:${frontend.url:http://localhost:3000}}
 
-# ==================== Resilience4j (Feign: auth-service, wallet-service) ====================
-# Applied via the "default" config to every circuit breaker/time limiter
-# Spring Cloud OpenFeign creates per Feign client method — per-client tuning
-# (e.g. a stricter threshold specifically for wallet-service) needs the
-# actual generated instance names confirmed first (visible via the
-# /actuator/health group once Actuator is added, or via DEBUG logging on
-# io.github.resilience4j); left at sane shared defaults here rather than
-# guessing at names that might not match and silently not apply.
+# Shared defaults for every Feign circuit breaker/time limiter (auth-service,
+# wallet-service). Per-client tuning needs the actual generated instance
+# names confirmed first.
 resilience4j:
   circuitbreaker:
     configs:
@@ -217,10 +156,15 @@ resilience4j:
       default:
         timeout-duration: 5s
 
-# ==================== Logging ====================
 logging:
   level:
     "[com.premisave]": DEBUG
     "[org.springframework.data.mongodb]": WARN
     "[org.springframework.data.repository.config.RepositoryConfigurationExtensionSupport]": ERROR
     "[org.springframework.cloud.commons.util.InetUtils]": ERROR
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
