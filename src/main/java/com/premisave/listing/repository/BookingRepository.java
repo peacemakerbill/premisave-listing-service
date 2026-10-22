@@ -2,6 +2,7 @@ package com.premisave.listing.repository;
 
 import com.premisave.listing.entity.Booking;
 import com.premisave.listing.enums.BookingStatus;
+import com.premisave.listing.enums.EscrowStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface BookingRepository extends MongoRepository<Booking, String> {
@@ -22,24 +24,18 @@ public interface BookingRepository extends MongoRepository<Booking, String> {
 
     Page<Booking> findByOwnerIdAndStatus(String ownerId, BookingStatus status, Pageable pageable);
 
+    Page<Booking> findByStatusOrEscrowStatus(BookingStatus status, EscrowStatus escrowStatus, Pageable pageable);
+
+    Optional<Booking> findByTenantIdAndIdempotencyKey(String tenantId, String idempotencyKey);
+
     /**
-     * Overlap check: a conflicting booking exists if its date range
-     * intersects the requested one at all — the standard "A starts before
-     * B ends AND B starts before A ends" interval-overlap condition.
-     * Restricted to PENDING/CONFIRMED, since CANCELLED/FAILED bookings
-     * don't actually hold the dates.
+     * Friendly pre-check for overlapping stays. The real guarantee against
+     * double booking is the per-night claim in BookingSlotService; this just
+     * lets us answer most conflicts without touching it.
      */
     @Query("{ 'listingId': ?0, 'status': { $in: ['PENDING', 'CONFIRMED'] }, "
             + "'checkIn': { $lt: ?2 }, 'checkOut': { $gt: ?1 } }")
     List<Booking> findOverlapping(String listingId, LocalDateTime checkIn, LocalDateTime checkOut);
 
-    /**
-     * Backs the scheduled completion sweep — CONFIRMED bookings whose
-     * checkOut has passed. Cross-listing (no listingId filter), so this
-     * relies on Booking's separate (status, checkOut) compound index
-     * rather than the overlap query's (listingId, checkIn, checkOut,
-     * status) one, which leads with listingId and wouldn't serve this
-     * efficiently.
-     */
     List<Booking> findByStatusAndCheckOutBefore(BookingStatus status, LocalDateTime checkOut);
 }

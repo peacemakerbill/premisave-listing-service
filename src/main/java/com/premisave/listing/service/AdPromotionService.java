@@ -15,6 +15,7 @@ import com.premisave.listing.repository.ListingPromotionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,8 +23,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -41,6 +44,7 @@ public class AdPromotionService {
     private final PaymentService paymentService;
     private final ListingService listingService;
     private final AuthServiceClient authServiceClient;
+    private final SchedulerLockService lockService;
 
     @Value("${ad.promotion.daily-rate:2.99}")
     private BigDecimal dailyRate;
@@ -70,11 +74,21 @@ public class AdPromotionService {
     @Transactional
     public AdPromotionResponse promoteListing(AdPromotionRequest request,
                                               String userId,
-                                              String authHeader) {
+                                              String authHeader,
+                                              String idempotencyKey) {
+        String key = normaliseKey(idempotencyKey);
+
         // 1. Verify identity
         UserSummaryResponse user = authServiceClient.getCurrentUser(authHeader);
         if (user == null || !user.getId().equals(userId)) {
             throw new AuthenticationFailedException("User authentication failed. Please log in again.");
+        }
+
+        if (key != null) {
+            Optional<ListingPromotion> existing = promotionRepository.findByOwnerIdAndIdempotencyKey(userId, key);
+            if (existing.isPresent()) {
+                return replay(existing.get(), request.getListingId(), request.getDays());
+            }
         }
 
         // 2. Fetch listing and verify ownership
@@ -116,7 +130,18 @@ public class AdPromotionService {
         promotion.setStartDate(now);
         promotion.setEndDate(now.plusDays(days));
         promotion.setPaymentStatus(PaymentStatus.PENDING);
-        promotion = promotionRepository.save(promotion);
+        promotion.setIdempotencyKey(key);
+        try {
+            promotion = promotionRepository.save(promotion);
+        } catch (DuplicateKeyException e) {
+            Optional<ListingPromotion> raced = key == null
+                    ? Optional.empty()
+                    : promotionRepository.findByOwnerIdAndIdempotencyKey(userId, key);
+            if (raced.isPresent()) {
+                return replay(raced.get(), request.getListingId(), request.getDays());
+            }
+            throw e;
+        }
 
         // 6. Debit the wallet via wallet-service
         Payment payment;
@@ -189,10 +214,20 @@ public class AdPromotionService {
     public AdPromotionResponse extendPromotion(String listingId,
                                                int additionalDays,
                                                String userId,
-                                               String authHeader) {
+                                               String authHeader,
+                                               String idempotencyKey) {
+        String key = normaliseKey(idempotencyKey);
+
         UserSummaryResponse user = authServiceClient.getCurrentUser(authHeader);
         if (user == null || !user.getId().equals(userId)) {
             throw new AuthenticationFailedException("User authentication failed. Please log in again.");
+        }
+
+        if (key != null) {
+            Optional<ListingPromotion> existing = promotionRepository.findByOwnerIdAndIdempotencyKey(userId, key);
+            if (existing.isPresent()) {
+                return replay(existing.get(), listingId, additionalDays);
+            }
         }
 
         if (additionalDays < 1) {
@@ -225,7 +260,18 @@ public class AdPromotionService {
         extension.setStartDate(now);
         extension.setEndDate(newEndDate);
         extension.setPaymentStatus(PaymentStatus.PENDING);
-        extension = promotionRepository.save(extension);
+        extension.setIdempotencyKey(key);
+        try {
+            extension = promotionRepository.save(extension);
+        } catch (DuplicateKeyException e) {
+            Optional<ListingPromotion> raced = key == null
+                    ? Optional.empty()
+                    : promotionRepository.findByOwnerIdAndIdempotencyKey(userId, key);
+            if (raced.isPresent()) {
+                return replay(raced.get(), listingId, additionalDays);
+            }
+            throw e;
+        }
 
         Payment payment;
         try {
@@ -273,6 +319,37 @@ public class AdPromotionService {
         );
     }
 
+    // ====================== IDEMPOTENCY ======================
+
+    private static String normaliseKey(String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String trimmed = key.trim();
+        if (trimmed.length() > 100) {
+            throw new IllegalArgumentException("Idempotency-Key must be at most 100 characters.");
+        }
+        return trimmed;
+    }
+
+    /** A repeated request with the same Idempotency-Key gets the original result, with no second charge. */
+    private AdPromotionResponse replay(ListingPromotion existing, String listingId, Integer days) {
+        if (!existing.getListingId().equals(listingId) || days == null || existing.getDays() != days) {
+            throw new IllegalArgumentException(
+                    "This Idempotency-Key was already used for a different promotion request.");
+        }
+        boolean paid = existing.getPaymentStatus() == PaymentStatus.COMPLETED;
+        String message = paid
+                ? "This request was already processed. The promotion is active."
+                : existing.getPaymentStatus() == PaymentStatus.PENDING
+                ? "This request is still being processed."
+                : "This request was already processed and the payment did not go through. "
+                        + "Use a new Idempotency-Key to try again.";
+        return new AdPromotionResponse(
+                existing.getId(), existing.getListingId(), existing.getDays(),
+                existing.getTotalAmount(), existing.getEndDate(), message, paid);
+    }
+
     // ====================== SCHEDULED: DEACTIVATE EXPIRED PROMOTIONS ======================
 
     /**
@@ -284,8 +361,12 @@ public class AdPromotionService {
      * ListingPromotion.
      */
     @Scheduled(cron = "${ad.promotion.expiry-check-cron:0 */5 * * * *}")
-    @Transactional
     public void deactivateExpiredPromotions() {
+        lockService.runLocked("promotion-expiry", Duration.ofMinutes(4), Duration.ofSeconds(30),
+                this::deactivateExpired);
+    }
+
+    private void deactivateExpired() {
         log.info("Scheduled task: checking for expired promotions...");
 
         List<ListingPromotion> expired = promotionRepository.findByEndDateBeforeAndPaymentStatus(

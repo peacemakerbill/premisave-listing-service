@@ -96,7 +96,9 @@ public class SecurityConfig {
                         "/listings/search",
                         "/listings/short-term",
                         "/listings/owner/**",
-                        "/listings/{id}"
+                        "/listings/{id}",
+                        "/listings/{id}/availability",
+                        "/images/{fileId}"
                 ).permitAll()
                 .requestMatchers("/admin/**").hasAnyRole("ADMIN", "FINANCE")
                 .anyRequest().authenticated()

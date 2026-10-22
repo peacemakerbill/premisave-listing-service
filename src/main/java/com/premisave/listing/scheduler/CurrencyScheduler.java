@@ -1,10 +1,13 @@
 package com.premisave.listing.scheduler;
 
 import com.premisave.listing.service.CurrencyService;
+import com.premisave.listing.service.SchedulerLockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.time.Duration;
 
 /**
  * CurrencyScheduler
@@ -25,6 +28,7 @@ import org.springframework.stereotype.Component;
 public class CurrencyScheduler {
 
     private final CurrencyService currencyService;
+    private final SchedulerLockService lockService;
 
     /**
      * Refresh exchange rates every hour.
@@ -33,13 +37,16 @@ public class CurrencyScheduler {
      */
     @Scheduled(initialDelay = 0, fixedDelay = 3_600_000)
     public void refreshExchangeRates() {
-        log.info("Scheduled: refreshing exchange rates from Frankfurter...");
-        try {
-            currencyService.refreshRates();
-            log.info("Scheduled: exchange rate refresh complete.");
-        } catch (Exception e) {
-            log.error("Scheduled: exchange rate refresh failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
-            // Non-fatal — stale cached rates are still served until next successful refresh
-        }
+        // Rates live in the shared Redis cache, so one instance refreshing is enough.
+        lockService.runLocked("currency-refresh", Duration.ofMinutes(5), Duration.ofMinutes(10), () -> {
+            log.info("Scheduled: refreshing exchange rates from Frankfurter...");
+            try {
+                currencyService.refreshRates();
+                log.info("Scheduled: exchange rate refresh complete.");
+            } catch (Exception e) {
+                log.error("Scheduled: exchange rate refresh failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+                // Non-fatal — stale cached rates are still served until next successful refresh
+            }
+        });
     }
 }

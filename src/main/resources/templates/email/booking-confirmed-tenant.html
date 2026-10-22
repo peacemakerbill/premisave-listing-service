@@ -78,7 +78,7 @@
           <tr>
             <td style="padding: 24px 32px 32px 32px;">
               <p style="font-size: 14px; color:#4b5563; line-height:1.6; margin:0;">
-                Thanks for booking with Premisave! If you didn't make this booking, please contact our support team right away.
+                Thanks for booking with Premisave! <span th:if="${escrow}">Your payment is held securely by Premisave and is paid to the host <span th:text="${releaseDelayHours}">24</span> hours after check-in. The cancellation policy for this stay is <strong th:text="${policy}">MODERATE</strong>; you can see exactly what you would get back before you cancel.</span> If you didn't make this booking, please contact our support team right away.
               </p>
             </td>
           </tr>

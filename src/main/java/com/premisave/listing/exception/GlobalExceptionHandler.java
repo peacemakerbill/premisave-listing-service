@@ -232,6 +232,17 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * The image folder is unusable (share not mounted, disk full, not
+     * writable). Reported as 503, like the other dependency outages.
+     */
+    @ExceptionHandler(StorageUnavailableException.class)
+    public ResponseEntity<ApiResponse<String>> handleStorageUnavailableException(StorageUnavailableException ex) {
+        log.warn("Image storage unavailable: {}", ex.getMessage());
+        ApiResponse<String> response = new ApiResponse<>(false, ex.getMessage(), null);
+        return new ResponseEntity<>(response, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /**
      * MongoDB (or any Spring Data-backed store) is unreachable or errored.
      * Logged as a single line (message only, no stack trace) so the
      * console stays readable while testing — the full detail is returned

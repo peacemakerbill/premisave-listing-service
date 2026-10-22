@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ListingPromotionRepository extends MongoRepository<ListingPromotion, String> {
@@ -21,6 +22,8 @@ public interface ListingPromotionRepository extends MongoRepository<ListingPromo
     Page<ListingPromotion> findByOwnerId(String ownerId, Pageable pageable);
 
     List<ListingPromotion> findByListingId(String listingId);
+
+    Optional<ListingPromotion> findByOwnerIdAndIdempotencyKey(String ownerId, String idempotencyKey);
 
     /**
      * Used by PaymentService to find the promotion linked to a confirmed payment.

@@ -1,5 +1,6 @@
 package com.premisave.listing.entity;
 
+import com.premisave.listing.enums.CancellationPolicy;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -32,6 +33,10 @@ public class ShortTermRental extends Listing {
 
     @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal pricePerNight;
+
+    /** How much of a booking is refunded when a tenant cancels. Null means the
+     *  default policy from application.yml (booking.cancellation.default-policy). */
+    private CancellationPolicy cancellationPolicy;
 
     private int maxGuests;
     private int bedrooms;

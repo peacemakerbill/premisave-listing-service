@@ -20,7 +20,10 @@ import java.time.LocalDateTime;
         // Matches the exact query pattern used by the hourly expiry
         // scheduler (findByEndDateBeforeAndPaymentStatus) — previously
         // unindexed, meaning that job scanned the whole collection.
-        @CompoundIndex(name = "end_date_payment_status_idx", def = "{'endDate': 1, 'paymentStatus': 1}")
+        @CompoundIndex(name = "end_date_payment_status_idx", def = "{'endDate': 1, 'paymentStatus': 1}"),
+        // One promotion per (owner, Idempotency-Key). Promotions without a key are left out of the index.
+        @CompoundIndex(name = "owner_idempotency_uidx", def = "{'ownerId': 1, 'idempotencyKey': 1}",
+                unique = true, partialFilter = "{ 'idempotencyKey': { '$type': 'string' } }")
 })
 public class ListingPromotion extends BaseEntity {
 
@@ -49,4 +52,7 @@ public class ListingPromotion extends BaseEntity {
     private String paymentId;
 
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
+
+    /** Client-supplied Idempotency-Key from the promote/extend request, if any. */
+    private String idempotencyKey;
 }

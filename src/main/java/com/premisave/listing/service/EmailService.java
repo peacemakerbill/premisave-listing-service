@@ -1,51 +1,36 @@
 package com.premisave.listing.service;
 
 import com.premisave.listing.entity.Booking;
-import jakarta.mail.internet.MimeMessage;
+import com.premisave.listing.enums.EscrowStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.thymeleaf.TemplateEngine;
-import org.thymeleaf.context.Context;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * All notification emails for bookings and listing interest, sent to both
- * parties (tenant/customer and listing owner) for every state change.
+ * Builds the notification emails for bookings and listing interest, to both
+ * parties for every state change, and hands them to EmailOutboxService,
+ * which stores them and sends them with retries.
  *
- * Renders HTML via Thymeleaf templates under
- * src/main/resources/templates/email/ — the TemplateEngine bean here is
- * the same one Spring Boot's Thymeleaf autoconfiguration already provides
- * for MVC views (added via spring-boot-starter-thymeleaf); reusing it for
- * email rendering is a standard pattern and needs no extra configuration,
- * since template resolution already defaults to classpath:/templates/
- * with an .html suffix — exactly where these templates live.
+ * Templates live under src/main/resources/templates/email/ and are rendered
+ * at send time by the Thymeleaf engine Spring Boot already provides.
  *
- * Visual design matches wallet-service's own transactional email templates
- * (navy header, icon-badge headline, feature card, detail-row table,
- * footer) for a consistent look across Premisave's emails.
- *
- * @Async so a slow or failing SMTP call never blocks or breaks the
- * underlying action — by the time any of these run, the booking/refund/
- * interest record has already been saved, so a failed email is logged and
- * swallowed rather than propagated (see sendHtml()).
+ * @Async so the caller never waits on the database write or the first send
+ * attempt. A failure here is logged and swallowed: by the time any of these
+ * run, the booking or interest record has already been saved.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailService {
 
-    private final JavaMailSender mailSender;
-    private final TemplateEngine templateEngine;
-
-    @Value("${mail-from:no-reply@premisave.com}")
-    private String fromAddress;
+    private final EmailOutboxService outbox;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d yyyy");
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d yyyy, h:mm a");
@@ -54,65 +39,73 @@ public class EmailService {
 
     @Async
     public void sendBookingConfirmedEmails(String tenantEmail, String tenantName,
-                                            String ownerEmail, String ownerName,
-                                            String listingTitle, Booking booking) {
-        String checkIn = booking.getCheckIn().format(DATE_FORMAT);
-        String checkOut = booking.getCheckOut().format(DATE_FORMAT);
-        String timestamp = now();
-        String reference = booking.getPaymentReference();
+                                           String ownerEmail, String ownerName,
+                                           String listingTitle, Booking booking,
+                                           boolean escrow, int releaseDelayHours) {
+        try {
+            Map<String, Object> common = new HashMap<>();
+            common.put("listingTitle", listingTitle);
+            common.put("checkIn", booking.getCheckIn().format(DATE_FORMAT));
+            common.put("checkOut", booking.getCheckOut().format(DATE_FORMAT));
+            common.put("currency", booking.getCurrency());
+            common.put("totalAmount", booking.getTotalAmount());
+            common.put("timestamp", now());
+            common.put("reference", booking.getPaymentReference());
+            common.put("escrow", escrow);
+            common.put("releaseDelayHours", releaseDelayHours);
 
-        Context tenantCtx = new Context();
-        tenantCtx.setVariable("recipientName", displayName(tenantName));
-        tenantCtx.setVariable("listingTitle", listingTitle);
-        tenantCtx.setVariable("checkIn", checkIn);
-        tenantCtx.setVariable("checkOut", checkOut);
-        tenantCtx.setVariable("currency", booking.getCurrency());
-        tenantCtx.setVariable("totalAmount", booking.getTotalAmount());
-        tenantCtx.setVariable("timestamp", timestamp);
-        tenantCtx.setVariable("reference", reference);
-        sendHtml(tenantEmail, "Booking confirmed: " + listingTitle, "email/booking-confirmed-tenant", tenantCtx);
+            Map<String, Object> tenantVars = new HashMap<>(common);
+            tenantVars.put("recipientName", displayName(tenantName));
+            tenantVars.put("policy", booking.getCancellationPolicy());
+            outbox.enqueue(tenantEmail, "Booking confirmed: " + listingTitle, "email/booking-confirmed-tenant", tenantVars);
 
-        if (ownerEmail != null) {
-            Context ownerCtx = new Context();
-            ownerCtx.setVariable("recipientName", displayName(ownerName));
-            ownerCtx.setVariable("otherPartyName", displayName(tenantName));
-            ownerCtx.setVariable("listingTitle", listingTitle);
-            ownerCtx.setVariable("checkIn", checkIn);
-            ownerCtx.setVariable("checkOut", checkOut);
-            ownerCtx.setVariable("currency", booking.getCurrency());
-            ownerCtx.setVariable("totalAmount", booking.getTotalAmount());
-            ownerCtx.setVariable("timestamp", timestamp);
-            ownerCtx.setVariable("reference", reference);
-            sendHtml(ownerEmail, "New booking: " + listingTitle, "email/booking-confirmed-owner", ownerCtx);
+            Map<String, Object> ownerVars = new HashMap<>(common);
+            ownerVars.put("recipientName", displayName(ownerName));
+            ownerVars.put("otherPartyName", displayName(tenantName));
+            outbox.enqueue(ownerEmail, "New booking: " + listingTitle, "email/booking-confirmed-owner", ownerVars);
+
+            outbox.dispatchDue();
+        } catch (Exception e) {
+            log.error("Could not queue booking confirmation emails: {}: {}", e.getClass().getSimpleName(), e.getMessage());
         }
     }
 
     @Async
     public void sendBookingCancelledEmails(String tenantEmail, String tenantName,
-                                            String ownerEmail, String ownerName,
-                                            String listingTitle, Booking booking) {
-        String timestamp = now();
-        String reference = booking.getRefundReference();
+                                           String ownerEmail, String ownerName,
+                                           String listingTitle, Booking booking, boolean escrow) {
+        try {
+            boolean settled = !escrow || booking.getEscrowStatus() == EscrowStatus.SETTLED;
+            BigDecimal refund = booking.getRefundAmount() != null ? booking.getRefundAmount() : booking.getTotalAmount();
+            BigDecimal ownerShare = booking.getOwnerPayoutAmount() != null ? booking.getOwnerPayoutAmount() : BigDecimal.ZERO;
+            int percent = booking.getRefundPercent() != null ? booking.getRefundPercent() : 100;
 
-        Context tenantCtx = new Context();
-        tenantCtx.setVariable("recipientName", displayName(tenantName));
-        tenantCtx.setVariable("listingTitle", listingTitle);
-        tenantCtx.setVariable("currency", booking.getCurrency());
-        tenantCtx.setVariable("totalAmount", booking.getTotalAmount());
-        tenantCtx.setVariable("timestamp", timestamp);
-        tenantCtx.setVariable("reference", reference);
-        sendHtml(tenantEmail, "Booking cancelled: " + listingTitle, "email/booking-cancelled-tenant", tenantCtx);
+            Map<String, Object> common = new HashMap<>();
+            common.put("listingTitle", listingTitle);
+            common.put("currency", booking.getCurrency());
+            common.put("totalAmount", booking.getTotalAmount());
+            common.put("refundAmount", refund);
+            common.put("refundPercent", percent);
+            common.put("policy", booking.getCancellationPolicy());
+            common.put("escrow", escrow);
+            common.put("settled", settled);
+            common.put("timestamp", now());
+            common.put("reference", booking.getRefundReference());
 
-        if (ownerEmail != null) {
-            Context ownerCtx = new Context();
-            ownerCtx.setVariable("recipientName", displayName(ownerName));
-            ownerCtx.setVariable("otherPartyName", displayName(tenantName));
-            ownerCtx.setVariable("listingTitle", listingTitle);
-            ownerCtx.setVariable("currency", booking.getCurrency());
-            ownerCtx.setVariable("totalAmount", booking.getTotalAmount());
-            ownerCtx.setVariable("timestamp", timestamp);
-            ownerCtx.setVariable("reference", reference);
-            sendHtml(ownerEmail, "Booking cancelled: " + listingTitle, "email/booking-cancelled-owner", ownerCtx);
+            Map<String, Object> tenantVars = new HashMap<>(common);
+            tenantVars.put("recipientName", displayName(tenantName));
+            outbox.enqueue(tenantEmail, "Booking cancelled: " + listingTitle, "email/booking-cancelled-tenant", tenantVars);
+
+            Map<String, Object> ownerVars = new HashMap<>(common);
+            ownerVars.put("recipientName", displayName(ownerName));
+            ownerVars.put("otherPartyName", displayName(tenantName));
+            ownerVars.put("ownerAmount", ownerShare);
+            ownerVars.put("ownerKeepsMoney", ownerShare.signum() > 0);
+            outbox.enqueue(ownerEmail, "Booking cancelled: " + listingTitle, "email/booking-cancelled-owner", ownerVars);
+
+            outbox.dispatchDue();
+        } catch (Exception e) {
+            log.error("Could not queue booking cancellation emails: {}: {}", e.getClass().getSimpleName(), e.getMessage());
         }
     }
 
@@ -120,45 +113,45 @@ public class EmailService {
 
     @Async
     public void sendInterestExpressedEmails(String customerEmail, String customerName,
-                                             String ownerEmail, String ownerName,
-                                             String listingTitle) {
-        String timestamp = now();
-
-        Context customerCtx = new Context();
-        customerCtx.setVariable("recipientName", displayName(customerName));
-        customerCtx.setVariable("listingTitle", listingTitle);
-        customerCtx.setVariable("timestamp", timestamp);
-        sendHtml(customerEmail, "You expressed interest in: " + listingTitle, "email/interest-expressed-customer", customerCtx);
-
-        if (ownerEmail != null) {
-            Context ownerCtx = new Context();
-            ownerCtx.setVariable("recipientName", displayName(ownerName));
-            ownerCtx.setVariable("otherPartyName", displayName(customerName));
-            ownerCtx.setVariable("listingTitle", listingTitle);
-            ownerCtx.setVariable("timestamp", timestamp);
-            sendHtml(ownerEmail, "New interest in your listing: " + listingTitle, "email/interest-expressed-owner", ownerCtx);
-        }
+                                            String ownerEmail, String ownerName,
+                                            String listingTitle) {
+        sendInterestEmails(customerEmail, customerName, ownerEmail, ownerName, listingTitle,
+                "You expressed interest in: " + listingTitle, "email/interest-expressed-customer",
+                "New interest in your listing: " + listingTitle, "email/interest-expressed-owner");
     }
 
     @Async
     public void sendInterestCancelledEmails(String customerEmail, String customerName,
-                                             String ownerEmail, String ownerName,
-                                             String listingTitle) {
-        String timestamp = now();
+                                            String ownerEmail, String ownerName,
+                                            String listingTitle) {
+        sendInterestEmails(customerEmail, customerName, ownerEmail, ownerName, listingTitle,
+                "Interest cancelled: " + listingTitle, "email/interest-cancelled-customer",
+                "Interest withdrawn: " + listingTitle, "email/interest-cancelled-owner");
+    }
 
-        Context customerCtx = new Context();
-        customerCtx.setVariable("recipientName", displayName(customerName));
-        customerCtx.setVariable("listingTitle", listingTitle);
-        customerCtx.setVariable("timestamp", timestamp);
-        sendHtml(customerEmail, "Interest cancelled: " + listingTitle, "email/interest-cancelled-customer", customerCtx);
+    private void sendInterestEmails(String customerEmail, String customerName,
+                                    String ownerEmail, String ownerName, String listingTitle,
+                                    String customerSubject, String customerTemplate,
+                                    String ownerSubject, String ownerTemplate) {
+        try {
+            String timestamp = now();
 
-        if (ownerEmail != null) {
-            Context ownerCtx = new Context();
-            ownerCtx.setVariable("recipientName", displayName(ownerName));
-            ownerCtx.setVariable("otherPartyName", displayName(customerName));
-            ownerCtx.setVariable("listingTitle", listingTitle);
-            ownerCtx.setVariable("timestamp", timestamp);
-            sendHtml(ownerEmail, "Interest withdrawn: " + listingTitle, "email/interest-cancelled-owner", ownerCtx);
+            Map<String, Object> customerVars = new HashMap<>();
+            customerVars.put("recipientName", displayName(customerName));
+            customerVars.put("listingTitle", listingTitle);
+            customerVars.put("timestamp", timestamp);
+            outbox.enqueue(customerEmail, customerSubject, customerTemplate, customerVars);
+
+            Map<String, Object> ownerVars = new HashMap<>();
+            ownerVars.put("recipientName", displayName(ownerName));
+            ownerVars.put("otherPartyName", displayName(customerName));
+            ownerVars.put("listingTitle", listingTitle);
+            ownerVars.put("timestamp", timestamp);
+            outbox.enqueue(ownerEmail, ownerSubject, ownerTemplate, ownerVars);
+
+            outbox.dispatchDue();
+        } catch (Exception e) {
+            log.error("Could not queue interest emails: {}: {}", e.getClass().getSimpleName(), e.getMessage());
         }
     }
 
@@ -170,32 +163,5 @@ public class EmailService {
 
     private String displayName(String name) {
         return (name != null && !name.isBlank()) ? name : "there";
-    }
-
-    private void sendHtml(String to, String subject, String templateName, Context context) {
-        if (to == null || to.isBlank()) {
-            log.warn("Skipped sending email '{}' — no recipient address available.", subject);
-            return;
-        }
-        try {
-            String html = templateEngine.process(templateName, context);
-
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(html, true);
-
-            mailSender.send(mimeMessage);
-            log.info("Email sent: to={}, subject={}", to, subject);
-        } catch (Exception e) {
-            // Never let an email failure break the underlying booking/interest
-            // action — the money movement or record change has already
-            // succeeded by the time this runs (@Async, called after the
-            // fact), so a failed notification shouldn't roll anything back.
-            log.error("Failed to send email: to={}, subject={}, error={}: {}",
-                    to, subject, e.getClass().getSimpleName(), e.getMessage());
-        }
     }
 }

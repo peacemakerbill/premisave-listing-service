@@ -9,7 +9,7 @@
     {
       "name": "rate-limit.default-tier.capacity",
       "type": "java.lang.Integer",
-      "description": "Max tokens (requests) the default tier's bucket can hold. Applies to any endpoint not matched by sensitive-paths or write-paths — ordinary browsing/reading (search, view a listing, currency rates).",
+      "description": "Max tokens (requests) the default tier's bucket can hold. Applies to any endpoint not matched by sensitive-paths or write-paths \u2014 ordinary browsing/reading (search, view a listing, currency rates).",
       "defaultValue": 300
     },
     {
@@ -27,7 +27,7 @@
     {
       "name": "rate-limit.write-tier.capacity",
       "type": "java.lang.Integer",
-      "description": "Max tokens the write tier's bucket can hold. Applies to endpoints listed in write-paths — creating/editing/deleting listings.",
+      "description": "Max tokens the write tier's bucket can hold. Applies to endpoints listed in write-paths \u2014 creating/editing/deleting listings.",
       "defaultValue": 30
     },
     {
@@ -45,7 +45,7 @@
     {
       "name": "rate-limit.sensitive-tier.capacity",
       "type": "java.lang.Integer",
-      "description": "Max tokens the sensitive tier's bucket can hold. Applies to endpoints listed in sensitive-paths — anything that moves money or generates a lead a human contacts (bookings, cancellations, promotions, expressing interest). Deliberately the strictest tier, since these are exactly the actions fraud/spam patterns target.",
+      "description": "Max tokens the sensitive tier's bucket can hold. Applies to endpoints listed in sensitive-paths \u2014 anything that moves money or generates a lead a human contacts (bookings, cancellations, promotions, expressing interest). Deliberately the strictest tier, since these are exactly the actions fraud/spam patterns target.",
       "defaultValue": 10
     },
     {
@@ -78,39 +78,24 @@
     {
       "name": "wallet.service.url",
       "type": "java.lang.String",
-      "description": "Base URL of the wallet service. All payment execution (M-Pesa, PayPal, Stripe, Flutterwave, NOWPayments) now lives there; this service only calls its internal debit endpoint.",
+      "description": "Base URL of the wallet service. All payment execution (M-Pesa, PayPal, Stripe, Flutterwave, NOWPayments) lives there. This service calls its internal endpoints only: debit, transfer, transfer and commission lookups, and escrow hold, payout and lookup.",
       "defaultValue": "http://localhost:8084"
     },
     {
       "name": "mail-from",
       "type": "java.lang.String",
-      "description": "The 'From' address EmailService uses on every booking/interest notification email. Not a Spring Boot-recognized mail property — Spring's mail starter has no such setting, this is purely this service's own convention.",
+      "description": "The 'From' address EmailService uses on every booking/interest notification email. Not a Spring Boot-recognized mail property \u2014 Spring's mail starter has no such setting, this is purely this service's own convention.",
       "defaultValue": "no-reply@premisave.com"
     },
     {
       "name": "internal.service.api-key",
       "type": "java.lang.String",
-      "description": "Shared internal-service API key sent as X-API-Key on service-to-service calls (currently wallet-service's /internal/payment). Use the exact same value across every Premisave microservice — no default, since a wrong-but-present placeholder caused a confusing 401 at request time instead of a clear failure at startup."
+      "description": "Shared internal-service API key sent as X-API-Key on service-to-service calls to wallet-service (/internal/payment, /internal/transfer, /internal/escrow and the lookups). Use the exact same value across every Premisave microservice \u2014 no default, since a wrong-but-present placeholder caused a confusing 401 at request time instead of a clear failure at startup."
     },
     {
       "name": "jwt.secret",
       "type": "java.lang.String",
       "description": "Base64-encoded secret key used to sign and verify JWT tokens. Must match across all services."
-    },
-    {
-      "name": "cloudinary.cloud-name",
-      "type": "java.lang.String",
-      "description": "Cloudinary account cloud name."
-    },
-    {
-      "name": "cloudinary.api-key",
-      "type": "java.lang.String",
-      "description": "Cloudinary API key."
-    },
-    {
-      "name": "cloudinary.api-secret",
-      "type": "java.lang.String",
-      "description": "Cloudinary API secret."
     },
     {
       "name": "ad.promotion.daily-rate",
@@ -139,7 +124,7 @@
     {
       "name": "frankfurter.base-url",
       "type": "java.lang.String",
-      "description": "Base URL for the Frankfurter currency exchange rate API. Display-only conversion now — actual payment settlement happens in wallet-service.",
+      "description": "Base URL for the Frankfurter currency exchange rate API. Display-only conversion now \u2014 actual payment settlement happens in wallet-service.",
       "defaultValue": "https://api.frankfurter.dev"
     },
     {
@@ -152,29 +137,247 @@
       "name": "cors.allowed-origins",
       "type": "java.lang.String",
       "description": "Comma-separated list of allowed CORS origins, e.g. 'https://app.premisave.com,https://admin.premisave.com'. Falls back to frontend.url for single-origin setups."
+    },
+    {
+      "name": "storage.mode",
+      "type": "com.premisave.listing.enums.StorageMode",
+      "description": "LOCAL keeps images in storage.root; NETWORK keeps them on a mounted share.",
+      "defaultValue": "LOCAL"
+    },
+    {
+      "name": "storage.root",
+      "type": "java.lang.String",
+      "description": "Image folder used when storage.mode is LOCAL.",
+      "defaultValue": "./file-storage/premisave-listing"
+    },
+    {
+      "name": "storage.public-base-url",
+      "type": "java.lang.String",
+      "description": "Origin that serves GET /images/{id}; used to build the image URLs saved on listings.",
+      "defaultValue": "http://localhost:8082"
+    },
+    {
+      "name": "storage.network.mount-path",
+      "type": "java.lang.String",
+      "description": "Where the network share is mounted on this machine."
+    },
+    {
+      "name": "storage.network.directory",
+      "type": "java.lang.String",
+      "description": "Folder for this service inside the mount.",
+      "defaultValue": "premisave-listing"
+    },
+    {
+      "name": "storage.network.require-mount",
+      "type": "java.lang.Boolean",
+      "description": "Refuse to start or serve if the mount path is not an actual mount.",
+      "defaultValue": true
+    },
+    {
+      "name": "booking.reconciliation.pending-after-minutes",
+      "type": "java.lang.Integer",
+      "description": "Age after which a PENDING booking's payment is checked and, if needed, retried with the same reference. Keep it longer than the wallet-service call timeout so the original call has finished.",
+      "defaultValue": 3
+    },
+    {
+      "name": "email.outbox.max-attempts",
+      "type": "java.lang.Integer",
+      "description": "Send attempts before an outbox email is marked DEAD.",
+      "defaultValue": 6
+    },
+    {
+      "name": "wallet.commission.cache-seconds",
+      "type": "java.lang.Integer",
+      "description": "How long wallet-service's internal transfer commission rate (GET /internal/commission/rates) is reused before it is read again. Used only to tell the tenant what fee was added; wallet-service charges the fee itself.",
+      "defaultValue": 300
+    },
+    {
+      "name": "booking.max-stay-days",
+      "type": "java.lang.Integer",
+      "description": "Longest stay a single booking may span, in days or nights.",
+      "defaultValue": 90
+    },
+    {
+      "name": "booking.reconciliation.max-attempts",
+      "type": "java.lang.Integer",
+      "description": "Reconciliation attempts before a PENDING booking is parked as NEEDS_REVIEW for an admin.",
+      "defaultValue": 5
+    },
+    {
+      "name": "booking.reconciliation.lease-minutes",
+      "type": "java.lang.Integer",
+      "description": "How long one instance may work on a PENDING booking before another can pick it up.",
+      "defaultValue": 2
+    },
+    {
+      "name": "booking.reconciliation.retry-backoff-minutes",
+      "type": "java.lang.Integer",
+      "description": "Wait before a failed reconciliation attempt is repeated, multiplied by the attempt number.",
+      "defaultValue": 2
+    },
+    {
+      "name": "booking.reconciliation.batch-size",
+      "type": "java.lang.Integer",
+      "description": "PENDING bookings handled per reconciliation run.",
+      "defaultValue": 50
+    },
+    {
+      "name": "booking.reconciliation.cron",
+      "type": "java.lang.String",
+      "description": "Cron expression for the pending-booking reconciliation job. Standard 6-field Spring cron.",
+      "defaultValue": "0 */2 * * * *"
+    },
+    {
+      "name": "escrow.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Off by default: the tenant pays the owner directly in one transfer. When true, the booking payment is held by wallet-service in an escrow record (POST /internal/escrow/hold) and paid to the owner release-delay-hours after check-in, or refunded on cancellation. Wallet-service charges its commission once, on the hold, and nothing on the payouts. Needs the wallet-service escrow endpoints. Do not switch off while bookings are still held.",
+      "defaultValue": false
+    },
+    {
+      "name": "escrow.release-delay-hours",
+      "type": "java.lang.Integer",
+      "description": "Hours after check-in before the owner is paid from the escrow hold. 0 pays at check-in time.",
+      "defaultValue": 24
+    },
+    {
+      "name": "escrow.release-check-cron",
+      "type": "java.lang.String",
+      "description": "Cron expression for the job that pays owners for held bookings whose release delay has passed. Standard 6-field Spring cron.",
+      "defaultValue": "0 */5 * * * *"
+    },
+    {
+      "name": "escrow.settlement-retry-cron",
+      "type": "java.lang.String",
+      "description": "Cron expression for the job that retries cancellation payouts (refund and owner share) that did not go through. Standard 6-field Spring cron.",
+      "defaultValue": "0 */3 * * * *"
+    },
+    {
+      "name": "escrow.max-attempts",
+      "type": "java.lang.Integer",
+      "description": "Payout attempts before a booking's escrow is parked as NEEDS_REVIEW.",
+      "defaultValue": 5
+    },
+    {
+      "name": "escrow.lease-minutes",
+      "type": "java.lang.Integer",
+      "description": "How long one instance may work on a booking's payout before another can pick it up.",
+      "defaultValue": 5
+    },
+    {
+      "name": "escrow.retry-backoff-minutes",
+      "type": "java.lang.Integer",
+      "description": "Wait before a failed payout is retried, multiplied by the attempt number.",
+      "defaultValue": 2
+    },
+    {
+      "name": "escrow.batch-size",
+      "type": "java.lang.Integer",
+      "description": "Bookings handled per escrow job run.",
+      "defaultValue": 100
+    },
+    {
+      "name": "email.outbox.poll-ms",
+      "type": "java.lang.Long",
+      "description": "How often, in milliseconds, queued notification emails in the email_outbox collection are sent.",
+      "defaultValue": 30000
+    },
+    {
+      "name": "email.outbox.retry-backoff-minutes",
+      "type": "java.lang.Integer",
+      "description": "Wait before a failed email is sent again, multiplied by the attempt number.",
+      "defaultValue": 2
+    },
+    {
+      "name": "email.outbox.keep-sent-days",
+      "type": "java.lang.Integer",
+      "description": "Days a sent outbox email is kept before it is deleted.",
+      "defaultValue": 30
+    },
+    {
+      "name": "email.outbox.batch-size",
+      "type": "java.lang.Integer",
+      "description": "Outbox emails handled per run.",
+      "defaultValue": 50
+    },
+    {
+      "name": "storage.max-file-size-mb",
+      "type": "java.lang.Integer",
+      "description": "Largest accepted image upload, in megabytes. JPEG and PNG only.",
+      "defaultValue": 10
+    },
+    {
+      "name": "storage.max-images-per-listing",
+      "type": "java.lang.Integer",
+      "description": "Most images one listing may have.",
+      "defaultValue": 20
+    },
+    {
+      "name": "storage.network.protocol",
+      "type": "java.lang.String",
+      "description": "Protocol of the network share (SMB, NFS). Used in messages only; the operating system does the mounting.",
+      "defaultValue": "SMB"
+    },
+    {
+      "name": "storage.network.host",
+      "type": "java.lang.String",
+      "description": "Host of the network share. Used in messages only."
+    },
+    {
+      "name": "storage.network.share",
+      "type": "java.lang.String",
+      "description": "Name of the network share. Used in messages only."
     }
   ],
   "hints": [
     {
       "name": "logging.level.values",
       "values": [
-        {"value": "TRACE"},
-        {"value": "DEBUG"},
-        {"value": "INFO"},
-        {"value": "WARN"},
-        {"value": "ERROR"},
-        {"value": "FATAL"},
-        {"value": "OFF"}
+        {
+          "value": "TRACE"
+        },
+        {
+          "value": "DEBUG"
+        },
+        {
+          "value": "INFO"
+        },
+        {
+          "value": "WARN"
+        },
+        {
+          "value": "ERROR"
+        },
+        {
+          "value": "FATAL"
+        },
+        {
+          "value": "OFF"
+        }
       ]
     },
     {
       "name": "logging.level.keys",
       "values": [
-        {"value": "root", "description": "Root logger level."},
-        {"value": "com.premisave", "description": "All Premisave listing application classes."},
-        {"value": "org.springframework.data.mongodb", "description": "MongoDB data layer."},
-        {"value": "org.springframework.data.repository.config.RepositoryConfigurationExtensionSupport", "description": "Suppresses Redis/MongoDB repository conflict warnings."},
-        {"value": "org.springframework.cloud.commons.util.InetUtils", "description": "Suppresses hostname resolution warnings from Spring Cloud."}
+        {
+          "value": "root",
+          "description": "Root logger level."
+        },
+        {
+          "value": "com.premisave",
+          "description": "All Premisave listing application classes."
+        },
+        {
+          "value": "org.springframework.data.mongodb",
+          "description": "MongoDB data layer."
+        },
+        {
+          "value": "org.springframework.data.repository.config.RepositoryConfigurationExtensionSupport",
+          "description": "Suppresses Redis/MongoDB repository conflict warnings."
+        },
+        {
+          "value": "org.springframework.cloud.commons.util.InetUtils",
+          "description": "Suppresses hostname resolution warnings from Spring Cloud."
+        }
       ]
     }
   ]

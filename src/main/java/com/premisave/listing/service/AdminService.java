@@ -26,6 +26,7 @@ public class AdminService {
     private final HouseSaleRepository houseSaleRepository;
     private final LandSaleRepository landSaleRepository;
     private final LeaseRepository leaseRepository;
+    private final ImageStorageService imageStorage;
 
     // ====================== READ ======================
 
@@ -213,6 +214,15 @@ public class AdminService {
         else if (listing instanceof HouseSale hs) houseSaleRepository.delete(hs);
         else if (listing instanceof LandSale ls) landSaleRepository.delete(ls);
         else if (listing instanceof Lease l) leaseRepository.delete(l);
+
+        java.util.List<String> imageUrls = new ArrayList<>();
+        if (listing.getImageUrls() != null) {
+            imageUrls.addAll(listing.getImageUrls());
+        }
+        if (listing.getMainImageUrl() != null) {
+            imageUrls.add(listing.getMainImageUrl());
+        }
+        imageStorage.deleteOwnedByUrls(imageUrls, null);
 
         log.warn("Admin HARD DELETED listing: {}", id);
         return "Listing " + id + " has been permanently deleted";

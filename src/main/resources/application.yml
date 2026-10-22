@@ -6,7 +6,7 @@ spring:
   # here from spring.data.mongodb.* in Boot 4 — confirmed via Boot's own
   # 4.0 configuration changelog.
   mongodb:
-    uri: ${MONGODB_URI:mongodb://localhost:27017/premisave-listing}
+    uri: ${MONGODB_URI}
 
   threads:
     virtual:
@@ -22,15 +22,15 @@ spring:
       # startup can stall the app or lock the collection.
       auto-index-creation: true
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
       repositories:
         enabled: false  # prevents Redis from claiming MongoDB repositories
 
   servlet:
     multipart:
-      max-file-size: 20MB
-      max-request-size: 50MB
+      max-file-size: 10MB
+      max-request-size: 40MB
 
   cloud:
     discovery:
@@ -46,7 +46,7 @@ spring:
     converters:
       preferred-json-mapper: jackson2
 
-  # No defaults — fail at startup instead of silently using a placeholder SMTP server.
+  # No defaults: startup fails if a value is missing from .env.
   mail:
     host: ${MAIL_HOST}
     port: ${MAIL_PORT}
@@ -59,19 +59,22 @@ spring:
           starttls:
             enable: true
 
-# Not a real Spring Boot mail property — own key so it's not mistaken for one.
-mail-from: ${MAIL_FROM:no-reply@premisave.com}
+# This service's own key, not a Spring Boot mail property.
+mail-from: ${MAIL_FROM}
 
 server:
   port: 8082
 
 auth:
   service:
-    url: ${AUTH_SERVICE_URL:http://localhost:8080}
+    url: ${AUTH_SERVICE_URL}
 
 wallet:
   service:
-    url: ${WALLET_SERVICE_URL:http://localhost:8084}
+    url: ${WALLET_SERVICE_URL}
+  # How long wallet-service's commission rate is reused before it is read again.
+  commission:
+    cache-seconds: 300
 
 # Shared across every Premisave microservice — same value everywhere. No
 # default: a wrong placeholder here caused a confusing 401 before.
@@ -84,12 +87,21 @@ internal:
 jwt:
   secret: ${JWT_SECRET}
 
-# No defaults — these were previously real, working credentials committed
-# directly in this file. Set your own in .env.
-cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME}
-  api-key: ${CLOUDINARY_API_KEY}
-  api-secret: ${CLOUDINARY_API_SECRET}
+# Image folder. LOCAL uses root; NETWORK uses a share already mounted at
+# network.mount-path. The network.* values are read only in NETWORK mode.
+storage:
+  mode: ${STORAGE_MODE}
+  root: ${STORAGE_ROOT}
+  public-base-url: ${STORAGE_PUBLIC_BASE_URL}
+  max-file-size-mb: 10
+  max-images-per-listing: 20
+  network:
+    protocol: ${STORAGE_NETWORK_PROTOCOL}
+    host: ${STORAGE_NETWORK_HOST}
+    share: ${STORAGE_NETWORK_SHARE}
+    mount-path: ${STORAGE_NETWORK_MOUNT_PATH}
+    directory: ${STORAGE_NETWORK_DIRECTORY}
+    require-mount: ${STORAGE_NETWORK_REQUIRE_MOUNT}
 
 # Redis-backed, per-identity (user, falling back to IP), per-tier. Tune
 # here, no code change needed. sensitive is strict on purpose — money-
@@ -120,6 +132,11 @@ rate-limit:
     - "POST:/listings"
     - "PUT:/listings/*"
     - "DELETE:/listings/*"
+    - "POST:/listings/*/images"
+    - "DELETE:/listings/*/images/*"
+    - "PUT:/listings/*/images/*"
+    - "POST:/listings/*/blocked-dates"
+    - "DELETE:/listings/*/blocked-dates/*"
 
 ad:
   promotion:
@@ -129,15 +146,68 @@ ad:
 
 booking:
   completion-check-cron: "0 */5 * * * *"
+  max-stay-days: 90
+
+  # A booking whose payment outcome is unknown stays PENDING with its nights
+  # held. After pending-after-minutes the same transfer (same reference) is
+  # retried; wallet-service must treat a repeated reference as the same
+  # payment. After max-attempts the booking goes to NEEDS_REVIEW for an admin.
+  reconciliation:
+    pending-after-minutes: 3
+    max-attempts: 5
+    lease-minutes: 2
+    retry-backoff-minutes: 2
+    batch-size: 50
+    cron: "0 */2 * * * *"
+
+  # Refund tiers per cancellation policy. A tenant who cancels at least
+  # hours-before-check-in hours ahead gets refund-percent back; the best
+  # matching tier wins, and 0% applies once the stay has started. Owners
+  # cancelling always refund 100%.
+  cancellation:
+    default-policy: MODERATE
+    policies:
+      FLEXIBLE:
+        - { hours-before-check-in: 24, refund-percent: 100 }
+        - { hours-before-check-in: 0, refund-percent: 50 }
+      MODERATE:
+        - { hours-before-check-in: 120, refund-percent: 100 }
+        - { hours-before-check-in: 24, refund-percent: 50 }
+      STRICT:
+        - { hours-before-check-in: 336, refund-percent: 100 }
+        - { hours-before-check-in: 168, refund-percent: 50 }
+
+# enabled: wallet-service holds the booking payment (escrow hold) and pays
+# the owner release-delay-hours after check-in. Off: tenant pays the owner
+# directly. Needs the wallet-service escrow endpoints.
+escrow:
+  enabled: ${ESCROW_ENABLED}
+  release-delay-hours: ${ESCROW_RELEASE_DELAY_HOURS}
+  release-check-cron: "0 */5 * * * *"
+  settlement-retry-cron: "0 */3 * * * *"
+  max-attempts: 5
+  lease-minutes: 5
+  retry-backoff-minutes: 2
+  batch-size: 100
+
+# Booking emails are written to the email_outbox collection first and sent
+# from there, so a mail-server outage delays them instead of losing them.
+email:
+  outbox:
+    poll-ms: 30000
+    max-attempts: 6
+    retry-backoff-minutes: 2
+    keep-sent-days: 30
+    batch-size: 50
 
 frankfurter:
-  base-url: ${FRANKFURTER_BASE_URL:https://api.frankfurter.dev}
+  base-url: ${FRANKFURTER_BASE_URL}
 
 frontend:
-  url: ${FRONTEND_URL:http://localhost:3000}
+  url: ${FRONTEND_URL}
 
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:${frontend.url:http://localhost:3000}}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
 
 # Shared defaults for every Feign circuit breaker/time limiter (auth-service,
 # wallet-service). Per-client tuning needs the actual generated instance
@@ -146,6 +216,10 @@ resilience4j:
   circuitbreaker:
     configs:
       default:
+        # A 4xx answer from wallet-service (409, 422, ...) is a real answer, not an outage:
+        # it must not count towards opening the circuit.
+        ignore-exceptions:
+          - feign.FeignException$FeignClientException
         sliding-window-size: 20
         minimum-number-of-calls: 10
         failure-rate-threshold: 50

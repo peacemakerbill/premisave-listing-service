@@ -2,16 +2,21 @@ package com.premisave.listing.controller;
 
 import com.premisave.listing.dto.AdPromotionRequest;
 import com.premisave.listing.dto.AdPromotionResponse;
+import com.premisave.listing.dto.ImageListResponse;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingUpdateRequest;
 import com.premisave.listing.dto.ListingResponse;
 import com.premisave.listing.dto.MyListingResponse;
+import com.premisave.listing.dto.ReorderImagesRequest;
+import com.premisave.listing.dto.SetCoverImageRequest;
 import com.premisave.listing.entity.ListingPromotion;
 import com.premisave.listing.entity.ShortTermRental;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.service.AdPromotionService;
+import com.premisave.listing.service.ImageStorageService;
 import com.premisave.listing.service.ListingService;
+import com.premisave.listing.storage.StoredImage;
 import com.premisave.listing.util.JwtUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +37,7 @@ import java.util.List;
 public class ListingController {
 
     private final ListingService listingService;
+    private final ImageStorageService imageStorage;
     private final AdPromotionService adPromotionService;
     private final JwtUtil jwtUtil;
 
@@ -44,25 +50,33 @@ public class ListingController {
             @RequestPart(value = "files", required = false) List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
 
-        List<MultipartFile> validFiles = files != null
-                ? files.stream().filter(f -> f != null && !f.isEmpty()).toList()
-                : List.of();
+        String userId = jwtUtil.extractUserId(authorization);
+        List<MultipartFile> validFiles = nonEmpty(files);
+        checkImageCount(validFiles.size());
 
-        if (!validFiles.isEmpty()) {
-            validateImageFiles(validFiles);
-            List<String> imageUrls = listingService.uploadImages(validFiles);
-            request.setImageUrls(imageUrls);
-            if (!imageUrls.isEmpty() && (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank())) {
-                request.setMainImageUrl(imageUrls.get(0));
-            }
-        } else {
-            if (request.getImageUrls() == null) {
+        List<StoredImage> uploaded = List.of();
+        try {
+            if (!validFiles.isEmpty()) {
+                uploaded = imageStorage.storeAll(validFiles, userId);
+                List<String> imageUrls = new ArrayList<>(uploaded.stream().map(StoredImage::url).toList());
+                request.setImageUrls(imageUrls);
+                if (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank()) {
+                    request.setMainImageUrl(imageUrls.get(0));
+                }
+            } else if (request.getImageUrls() == null) {
                 request.setImageUrls(new ArrayList<>());
             }
+            checkImageCount(request.getImageUrls().size());
+            imageStorage.assertOwned(request.getImageUrls(), userId);
+            if (request.getMainImageUrl() != null) {
+                imageStorage.assertOwned(List.of(request.getMainImageUrl()), userId);
+            }
+            return ResponseEntity.ok(listingService.createListing(request, authorization));
+        } catch (RuntimeException e) {
+            // The listing was not created, so do not leave the new pictures behind.
+            uploaded.forEach(u -> imageStorage.delete(u.fileId()));
+            throw e;
         }
-
-        ListingResponse response = listingService.createListing(request, authorization);
-        return ResponseEntity.ok(response);
     }
 
     // ====================== UPDATE LISTING ======================
@@ -76,28 +90,60 @@ public class ListingController {
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
+        List<MultipartFile> validFiles = nonEmpty(files);
+        checkImageCount(validFiles.size());
 
-        List<MultipartFile> validFiles = files != null
-                ? files.stream().filter(f -> f != null && !f.isEmpty()).toList()
-                : List.of();
-
-        if (!validFiles.isEmpty()) {
-            validateImageFiles(validFiles);
-            List<String> newImageUrls = listingService.uploadImages(validFiles);
-            if (request.getImageUrls() == null) {
-                request.setImageUrls(new ArrayList<>());
-            }
-            request.getImageUrls().addAll(newImageUrls);
-            // Guard added: uploadImages returning fewer URLs than files sent
-            // (a partial upload failure) previously risked an
-            // IndexOutOfBoundsException here.
-            if (!newImageUrls.isEmpty() && (request.getMainImageUrl() == null || request.getMainImageUrl().isBlank())) {
-                request.setMainImageUrl(newImageUrls.get(0));
-            }
+        List<StoredImage> uploaded = List.of();
+        try {
+            uploaded = imageStorage.storeAll(validFiles, userId);
+            List<String> addedUrls = uploaded.stream().map(StoredImage::url).toList();
+            return ResponseEntity.ok(listingService.updateListing(id, request, userId, addedUrls));
+        } catch (RuntimeException e) {
+            uploaded.forEach(u -> imageStorage.delete(u.fileId()));
+            throw e;
         }
+    }
 
-        ListingResponse response = listingService.updateListing(id, request, userId);
-        return ResponseEntity.ok(response);
+    // ====================== IMAGES ======================
+
+    @PostMapping(value = "/{id}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('HOME_OWNER')")
+    public ResponseEntity<ImageListResponse> addImages(
+            @PathVariable String id,
+            @RequestParam List<MultipartFile> files,
+            @RequestHeader("Authorization") String authorization) {
+        String userId = jwtUtil.extractUserId(authorization);
+        return ResponseEntity.ok(listingService.addImages(id, files, userId));
+    }
+
+    @DeleteMapping("/{id}/images/{fileId}")
+    @PreAuthorize("hasRole('HOME_OWNER')")
+    public ResponseEntity<ImageListResponse> removeImage(
+            @PathVariable String id,
+            @PathVariable String fileId,
+            @RequestHeader("Authorization") String authorization) {
+        String userId = jwtUtil.extractUserId(authorization);
+        return ResponseEntity.ok(listingService.removeImage(id, fileId, userId));
+    }
+
+    @PutMapping("/{id}/images/cover")
+    @PreAuthorize("hasRole('HOME_OWNER')")
+    public ResponseEntity<ImageListResponse> setCoverImage(
+            @PathVariable String id,
+            @RequestBody @Valid SetCoverImageRequest body,
+            @RequestHeader("Authorization") String authorization) {
+        String userId = jwtUtil.extractUserId(authorization);
+        return ResponseEntity.ok(listingService.setCoverImage(id, body.fileId(), userId));
+    }
+
+    @PutMapping("/{id}/images/order")
+    @PreAuthorize("hasRole('HOME_OWNER')")
+    public ResponseEntity<ImageListResponse> reorderImages(
+            @PathVariable String id,
+            @RequestBody @Valid ReorderImagesRequest body,
+            @RequestHeader("Authorization") String authorization) {
+        String userId = jwtUtil.extractUserId(authorization);
+        return ResponseEntity.ok(listingService.reorderImages(id, body.fileIds(), userId));
     }
 
     // ====================== OTHER ENDPOINTS ======================
@@ -176,10 +222,11 @@ public class ListingController {
     @PreAuthorize("hasRole('HOME_OWNER')")
     public ResponseEntity<AdPromotionResponse> promoteListing(
             @Valid @RequestBody AdPromotionRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization);
+        AdPromotionResponse response = adPromotionService.promoteListing(request, userId, authorization, idempotencyKey);
         return ResponseEntity.ok(response);
     }
 
@@ -196,10 +243,11 @@ public class ListingController {
     public ResponseEntity<AdPromotionResponse> extendPromotion(
             @PathVariable String id,
             @RequestParam int days,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestHeader("Authorization") String authorization) {
 
         String userId = jwtUtil.extractUserId(authorization);
-        AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization);
+        AdPromotionResponse response = adPromotionService.extendPromotion(id, days, userId, authorization, idempotencyKey);
         return ResponseEntity.ok(response);
     }
 
@@ -253,24 +301,22 @@ public class ListingController {
     public ResponseEntity<List<String>> uploadImages(
             @RequestParam List<MultipartFile> files,
             @RequestHeader("Authorization") String authorization) {
-        validateImageFiles(files);
-        return ResponseEntity.ok(listingService.uploadImages(files));
+        String userId = jwtUtil.extractUserId(authorization);
+        List<MultipartFile> validFiles = nonEmpty(files);
+        checkImageCount(validFiles.size());
+        return ResponseEntity.ok(listingService.uploadImages(validFiles, userId));
     }
 
     // ====================== HELPERS ======================
 
-    /**
-     * Basic content-type check before handing files to Cloudinary — none of
-     * the upload paths previously validated MIME type at all, only that the
-     * file wasn't empty.
-     */
-    private void validateImageFiles(List<MultipartFile> files) {
-        for (MultipartFile file : files) {
-            String contentType = file.getContentType();
-            if (contentType == null || !contentType.startsWith("image/")) {
-                throw new IllegalArgumentException(
-                        "Invalid file type: " + file.getOriginalFilename() + ". Only image uploads are allowed.");
-            }
+    private static List<MultipartFile> nonEmpty(List<MultipartFile> files) {
+        return files == null ? List.of() : files.stream().filter(f -> f != null && !f.isEmpty()).toList();
+    }
+
+    private void checkImageCount(int count) {
+        if (count > imageStorage.maxImagesPerListing()) {
+            throw new IllegalArgumentException(
+                    "A listing can have at most " + imageStorage.maxImagesPerListing() + " images.");
         }
     }
 }

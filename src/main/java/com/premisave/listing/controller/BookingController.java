@@ -2,6 +2,7 @@ package com.premisave.listing.controller;
 
 import com.premisave.listing.dto.BookingRequest;
 import com.premisave.listing.dto.BookingResponse;
+import com.premisave.listing.dto.CancellationQuoteResponse;
 import com.premisave.listing.enums.BookingStatus;
 import com.premisave.listing.service.BookingService;
 import com.premisave.listing.util.JwtUtil;
@@ -21,21 +22,25 @@ public class BookingController {
     private final JwtUtil jwtUtil;
 
     /**
-     * Book a short-term rental — pays the owner directly via a
-     * wallet-service transfer. Requires the caller to actually be the
-     * authenticated user making the request (checked in BookingService).
+     * Book a short-term rental. The payment is held in escrow and paid to the
+     * owner after check-in (or goes straight to the owner when escrow is
+     * off). Send an Idempotency-Key header (any unique string, up to 100
+     * characters) so a retry after a timeout or double tap returns the first
+     * booking instead of creating a second one.
      */
     @PostMapping
     public ResponseEntity<BookingResponse> createBooking(
             @Valid @RequestBody BookingRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestHeader("Authorization") String authorization) {
         String tenantId = jwtUtil.extractUserId(authorization);
-        return ResponseEntity.ok(bookingService.createBooking(request, tenantId, authorization));
+        return ResponseEntity.ok(bookingService.createBooking(request, tenantId, authorization, idempotencyKey));
     }
 
     /**
-     * Cancel a confirmed booking — refunds the tenant via a wallet-service
-     * transfer. Either the tenant or the listing owner can cancel.
+     * Cancel a confirmed booking. The refund follows the listing's
+     * cancellation policy; if the owner cancels, the tenant is refunded in
+     * full. Cancelling twice returns the first result.
      */
     @PostMapping("/{id}/cancel")
     public ResponseEntity<BookingResponse> cancelBooking(
@@ -47,10 +52,22 @@ public class BookingController {
     }
 
     /**
+     * What cancelling this booking would refund right now, for the caller
+     * (the tenant sees the policy refund, the owner sees a full refund).
+     * Nothing changes.
+     */
+    @GetMapping("/{id}/cancellation-quote")
+    public ResponseEntity<CancellationQuoteResponse> getCancellationQuote(
+            @PathVariable String id,
+            @RequestHeader("Authorization") String authorization) {
+        String userId = jwtUtil.extractUserId(authorization);
+        return ResponseEntity.ok(bookingService.getCancellationQuote(id, userId));
+    }
+
+    /**
      * The caller's own bookings as a tenant, optionally filtered by status
      * (e.g. ?status=CONFIRMED for active bookings, ?status=CANCELLED for
-     * cancelled ones). Each item includes live tenant/owner details fetched
-     * from auth-service.
+     * cancelled ones).
      */
     @GetMapping("/me")
     public ResponseEntity<Page<BookingResponse>> getMyBookings(
@@ -61,10 +78,7 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getMyBookingsAsTenant(tenantId, status, authorization, pageable));
     }
 
-    /**
-     * Bookings received on the caller's own listings (as owner), optionally
-     * filtered by status.
-     */
+    /** Bookings received on the caller's own listings (as owner), optionally filtered by status. */
     @GetMapping("/received")
     public ResponseEntity<Page<BookingResponse>> getReceivedBookings(
             @RequestParam(required = false) BookingStatus status,

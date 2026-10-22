@@ -33,10 +33,14 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                     "/public/**",
+                    "/images/**",
                     "/system/health",
                     "/system/health/details",
                     "/swagger-ui/**",
                     "/v3/api-docs/**"
+                    // M-Pesa callback exclusions removed — those endpoints
+                    // no longer exist in this service; wallet-service owns
+                    // that surface (and its own rate-limit exclusions) now.
                 );
     }
 }

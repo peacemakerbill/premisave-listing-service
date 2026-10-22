@@ -1,9 +1,9 @@
 package com.premisave.listing.service;
 
-import com.cloudinary.Cloudinary;
 import com.premisave.listing.client.AuthServiceClient;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingUpdateRequest;
+import com.premisave.listing.dto.ImageListResponse;
 import com.premisave.listing.dto.ListingResponse;
 import com.premisave.listing.dto.MyListingResponse;
 import com.premisave.listing.dto.auth_service.UserSummaryResponse;
@@ -15,6 +15,7 @@ import com.premisave.listing.exception.AuthenticationFailedException;
 import com.premisave.listing.exception.NotFoundException;
 import com.premisave.listing.repository.*;
 import com.premisave.listing.security.JwtService;
+import com.premisave.listing.storage.StoredImage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -25,14 +26,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -46,7 +44,7 @@ public class ListingService {
     private final HouseSaleRepository houseSaleRepository;
     private final LeaseRepository leaseRepository;
     private final AuthServiceClient authServiceClient;
-    private final Cloudinary cloudinary;
+    private final ImageStorageService imageStorage;
     private final JwtService jwtService; // for role extraction
     private final MongoTemplate mongoTemplate;
 
@@ -199,6 +197,7 @@ public class ListingService {
         ShortTermRental st = new ShortTermRental();
         st.setPricePerDay(r.getPricePerDay());
         st.setPricePerNight(r.getPricePerNight());
+        st.setCancellationPolicy(r.getCancellationPolicy());
         st.setMaxGuests(r.getMaxGuests() != null ? r.getMaxGuests() : 1);
         st.setBedrooms(r.getBedrooms() != null ? r.getBedrooms() : 1);
         st.setBathrooms(r.getBathrooms() != null ? r.getBathrooms() : 1);
@@ -251,8 +250,20 @@ public class ListingService {
      *  RuntimeException removed; ownership check now throws
      *  AccessDeniedException (403) instead of a generic RuntimeException
      *  (400). */
-    @Transactional
     public ListingResponse updateListing(String id, ListingUpdateRequest request, String userId) {
+        return updateListing(id, request, userId, List.of());
+    }
+
+    /**
+     * addedImageUrls are pictures uploaded in this same request. They are
+     * appended to the list the owner sends (or to the current list when the
+     * request does not mention imageUrls), instead of replacing it, so adding
+     * a photo no longer wipes the existing ones. Images dropped from the list
+     * are deleted from storage once the listing is saved.
+     */
+    @Transactional
+    public ListingResponse updateListing(String id, ListingUpdateRequest request, String userId,
+                                         List<String> addedImageUrls) {
         Listing existing = (Listing) getListingById(id);
         if (!existing.getOwnerId().equals(userId)) {
             throw new AccessDeniedException("You can only update your own listings");
@@ -269,16 +280,44 @@ public class ListingService {
         if (request.getCountry() != null) existing.setCountry(request.getCountry());
         if (request.getCategory() != null) existing.setCategory(request.getCategory());
 
-        if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
-            existing.setMainImageUrl(request.getMainImageUrl());
+        List<String> before = existing.getImageUrls() == null ? new ArrayList<>() : new ArrayList<>(existing.getImageUrls());
+        boolean imagesTouched = request.getImageUrls() != null || (addedImageUrls != null && !addedImageUrls.isEmpty());
+        List<String> after = before;
+        if (imagesTouched) {
+            LinkedHashSet<String> merged = new LinkedHashSet<>(request.getImageUrls() != null ? request.getImageUrls() : before);
+            if (addedImageUrls != null) {
+                merged.addAll(addedImageUrls);
+            }
+            after = new ArrayList<>(merged);
+            if (after.size() > imageStorage.maxImagesPerListing()) {
+                throw new IllegalArgumentException(
+                        "A listing can have at most " + imageStorage.maxImagesPerListing() + " images.");
+            }
+            imageStorage.assertOwned(after, userId);
+            existing.setImageUrls(after);
         }
 
-        if (request.getImageUrls() != null) {
-            existing.setImageUrls(request.getImageUrls());
+        if (request.getMainImageUrl() != null && !request.getMainImageUrl().isBlank()) {
+            imageStorage.assertOwned(List.of(request.getMainImageUrl()), userId);
+            existing.setMainImageUrl(request.getMainImageUrl());
+        }
+        if (imagesTouched) {
+            String main = existing.getMainImageUrl();
+            boolean mainLost = main == null || main.isBlank()
+                    || (imageStorage.fileIdFromUrl(main) != null && !after.contains(main));
+            if (mainLost) {
+                existing.setMainImageUrl(after.isEmpty() ? null : after.get(0));
+            }
         }
 
         updateSpecificFields(existing, request);
         Listing saved = saveListing(existing);
+
+        if (imagesTouched) {
+            List<String> removed = new ArrayList<>(before);
+            removed.removeAll(after);
+            imageStorage.deleteOwnedByUrls(removed, userId);
+        }
 
         log.info("Listing updated: {} by user {}", saved.getId(), userId);
 
@@ -298,44 +337,108 @@ public class ListingService {
         };
     }
 
-    // ====================== IMAGE UPLOAD ======================
+    // ====================== IMAGES ======================
 
-    public String uploadImage(MultipartFile file) throws IOException {
-        if (file == null || file.isEmpty()) {
-            return null;
-        }
-        try {
-            Map<String, Object> uploadParams = new HashMap<>();
-            uploadParams.put("folder", "premisave/listings");
-            uploadParams.put("resource_type", "auto");
-
-            Map<?, ?> uploadResult = cloudinary.uploader().upload(file.getBytes(), uploadParams);
-            String url = (String) uploadResult.get("secure_url");
-            log.info("Image uploaded successfully: {}", url);
-            return url;
-        } catch (Exception e) {
-            // Message only — no trailing throwable, so no stack trace.
-            log.error("Cloudinary upload failed for file {}: {} — {}",
-                    file.getOriginalFilename(), e.getClass().getSimpleName(), e.getMessage());
-            throw new RuntimeException("Image upload failed: " + e.getMessage());
-        }
+    /** Stores the files and returns their URLs. All or nothing. Used by POST /listings/upload-images. */
+    public List<String> uploadImages(List<MultipartFile> files, String ownerId) {
+        return imageStorage.storeAll(files, ownerId).stream().map(StoredImage::url).toList();
     }
 
-    public List<String> uploadImages(List<MultipartFile> files) {
-        if (files == null || files.isEmpty()) {
-            return new ArrayList<>();
+    /** Adds pictures to an existing listing. */
+    @Transactional
+    public ImageListResponse addImages(String listingId, List<MultipartFile> files, String userId) {
+        Listing listing = ownedListing(listingId, userId);
+        List<String> urls = listing.getImageUrls() == null ? new ArrayList<>() : new ArrayList<>(listing.getImageUrls());
+        long incoming = files == null ? 0 : files.stream().filter(f -> f != null && !f.isEmpty()).count();
+        if (urls.size() + incoming > imageStorage.maxImagesPerListing()) {
+            throw new IllegalArgumentException(
+                    "A listing can have at most " + imageStorage.maxImagesPerListing() + " images.");
         }
-        return files.stream()
-                .map(file -> {
-                    try {
-                        return uploadImage(file);
-                    } catch (Exception e) {
-                        log.warn("Failed to upload image {}: {}", file.getOriginalFilename(), e.getMessage());
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .toList();
+        List<StoredImage> stored = imageStorage.storeAll(files, userId);
+        try {
+            stored.forEach(s -> urls.add(s.url()));
+            listing.setImageUrls(urls);
+            if (isBlank(listing.getMainImageUrl()) && !urls.isEmpty()) {
+                listing.setMainImageUrl(urls.get(0));
+            }
+            saveListing(listing);
+        } catch (RuntimeException e) {
+            stored.forEach(s -> imageStorage.delete(s.fileId()));
+            throw e;
+        }
+        return imageList(listing);
+    }
+
+    /** Removes one picture from a listing and from storage. */
+    @Transactional
+    public ImageListResponse removeImage(String listingId, String fileId, String userId) {
+        Listing listing = ownedListing(listingId, userId);
+        String url = findImageUrl(listing, fileId);
+        List<String> urls = new ArrayList<>(listing.getImageUrls());
+        urls.remove(url);
+        listing.setImageUrls(urls);
+        if (url.equals(listing.getMainImageUrl())) {
+            listing.setMainImageUrl(urls.isEmpty() ? null : urls.get(0));
+        }
+        saveListing(listing);
+        imageStorage.deleteOwnedByUrls(List.of(url), userId);
+        return imageList(listing);
+    }
+
+    @Transactional
+    public ImageListResponse setCoverImage(String listingId, String fileId, String userId) {
+        Listing listing = ownedListing(listingId, userId);
+        listing.setMainImageUrl(findImageUrl(listing, fileId));
+        saveListing(listing);
+        return imageList(listing);
+    }
+
+    /**
+     * Puts the listed images first, in the given order. Images the list does
+     * not mention keep their current order after them.
+     */
+    @Transactional
+    public ImageListResponse reorderImages(String listingId, List<String> fileIds, String userId) {
+        Listing listing = ownedListing(listingId, userId);
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        for (String fileId : fileIds) {
+            ordered.add(findImageUrl(listing, fileId));
+        }
+        ordered.addAll(listing.getImageUrls());
+        listing.setImageUrls(new ArrayList<>(ordered));
+        saveListing(listing);
+        return imageList(listing);
+    }
+
+    private Listing ownedListing(String listingId, String userId) {
+        Listing listing = (Listing) getListingById(listingId);
+        if (!listing.getOwnerId().equals(userId)) {
+            throw new AccessDeniedException("You can only change the images of your own listings");
+        }
+        if (listing.isDeleted()) {
+            throw new IllegalArgumentException("Listing has been deleted");
+        }
+        return listing;
+    }
+
+    private String findImageUrl(Listing listing, String fileId) {
+        if (listing.getImageUrls() != null) {
+            for (String url : listing.getImageUrls()) {
+                if (fileId != null && fileId.equals(imageStorage.fileIdFromUrl(url))) {
+                    return url;
+                }
+            }
+        }
+        throw new NotFoundException("That image is not part of this listing.");
+    }
+
+    private ImageListResponse imageList(Listing listing) {
+        return new ImageListResponse(listing.getMainImageUrl(),
+                listing.getImageUrls() == null ? List.of() : listing.getImageUrls());
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 
     // ====================== GET ======================
@@ -372,6 +475,7 @@ public class ListingService {
         if (r.getAmenities() != null) st.setAmenities(r.getAmenities());
         if (r.getPricePerDay() != null) st.setPricePerDay(r.getPricePerDay());
         if (r.getPricePerNight() != null) st.setPricePerNight(r.getPricePerNight());
+        if (r.getCancellationPolicy() != null) st.setCancellationPolicy(r.getCancellationPolicy());
         // Re-derive the base price/priceUnit whenever either rate changes,
         // same logic as on create.
         if (r.getPricePerDay() != null || r.getPricePerNight() != null) {

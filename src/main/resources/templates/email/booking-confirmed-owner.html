@@ -82,7 +82,7 @@
           <tr>
             <td style="padding: 24px 32px 32px 32px;">
               <p style="font-size: 14px; color:#4b5563; line-height:1.6; margin:0;">
-                This amount has already been sent to your wallet. Thank you for using Premisave.
+                <span th:if="${escrow}">This amount is held securely by Premisave and will be credited to your wallet <span th:text="${releaseDelayHours}">24</span> hours after check-in. If the booking is cancelled, the tenant's refund follows the listing's cancellation policy.</span><span th:unless="${escrow}">This amount has already been sent to your wallet.</span> Thank you for using Premisave.
               </p>
             </td>
           </tr>

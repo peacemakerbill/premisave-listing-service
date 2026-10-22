@@ -1,5 +1,6 @@
 package com.premisave.listing.dto;
 
+import com.premisave.listing.enums.CancellationPolicy;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.PriceUnit;
 import jakarta.validation.constraints.NotBlank;
@@ -54,6 +55,9 @@ public class ListingRequest {
      *  whichever of these is lower, purely for search/sort purposes. */
     private BigDecimal pricePerDay;
     private BigDecimal pricePerNight;
+
+    /** Short-term rentals only: FLEXIBLE, MODERATE or STRICT. Left empty, the default policy applies. */
+    private CancellationPolicy cancellationPolicy;
 
     // Long Term Rental
     private Integer minLeaseMonths;

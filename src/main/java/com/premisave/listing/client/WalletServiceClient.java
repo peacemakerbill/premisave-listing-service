@@ -2,9 +2,18 @@ package com.premisave.listing.client;
 
 import com.premisave.listing.config.WalletFeignConfig;
 import com.premisave.listing.dto.ApiResponse;
+import com.premisave.listing.dto.wallet_service.EscrowDetails;
+import com.premisave.listing.dto.wallet_service.EscrowHoldRequest;
+import com.premisave.listing.dto.wallet_service.EscrowHoldResponse;
+import com.premisave.listing.dto.wallet_service.EscrowPayoutRequest;
+import com.premisave.listing.dto.wallet_service.EscrowPayoutResponse;
+import com.premisave.listing.dto.wallet_service.WalletCommissionRates;
 import com.premisave.listing.dto.wallet_service.WalletInternalPaymentRequest;
+import com.premisave.listing.dto.wallet_service.WalletTransferRecord;
 import com.premisave.listing.dto.wallet_service.WalletTransferRequest;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -51,4 +60,32 @@ public interface WalletServiceClient {
      */
     @PostMapping("/internal/transfer")
     ApiResponse<Object> transferFunds(@RequestBody WalletTransferRequest request);
+
+    /**
+     * Looks up a transfer by the reference it was made with. 404 means no
+     * transfer was recorded (yet). A record exists only after the balances
+     * moved, so finding one means the money moved.
+     */
+    @GetMapping("/internal/transfer/{reference}")
+    ApiResponse<WalletTransferRecord> getTransfer(@PathVariable String reference);
+
+    /** Current commission rates. The sender pays the rate on top of the amount. */
+    @GetMapping("/internal/commission/rates")
+    ApiResponse<WalletCommissionRates> getCommissionRates();
+
+    /**
+     * Escrow: debits the tenant once (price plus wallet-service's commission) and keeps the price in an
+     * escrow record. 409 means the reference is already used (check it with getEscrow).
+     */
+    @PostMapping("/internal/escrow/hold")
+    ApiResponse<EscrowHoldResponse> holdEscrow(@RequestBody EscrowHoldRequest request);
+
+    /** Escrow: pays part or all of what is left in a hold to the tenant or the owner. No commission. */
+    @PostMapping("/internal/escrow/{holdReference}/payouts")
+    ApiResponse<EscrowPayoutResponse> payoutEscrow(@PathVariable String holdReference,
+                                                   @RequestBody EscrowPayoutRequest request);
+
+    /** Escrow: the hold and all its payouts. 404 means there is no such hold. */
+    @GetMapping("/internal/escrow/{holdReference}")
+    ApiResponse<EscrowDetails> getEscrow(@PathVariable String holdReference);
 }
