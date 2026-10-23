@@ -278,6 +278,19 @@ details.jv[open]>summary::before{content:"\2212"}
 .toolbar .pill-tabs{align-self:flex-start}
 .btn.sm.ghost{color:var(--ink2)}
 
+/* id picker */
+.idpick{display:flex;gap:6px;align-items:stretch}
+.idpick>input{flex:1;min-width:0}
+.idpick>.btn{flex:none;padding:0 10px;gap:5px}
+.pick-list{display:flex;flex-direction:column;gap:6px;max-height:min(52vh,460px);overflow:auto;padding-right:2px}
+.pick-row{display:flex;gap:12px;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer}
+.pick-row:hover,.pick-row:focus-visible{border-color:var(--accent);outline:none}
+.pick-row.on{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.pick-thumb{width:52px;height:40px;border-radius:6px;object-fit:cover;background:var(--line);flex:none}
+.pick-title{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-row .idline{margin-top:2px}
+.pick-row input[type=checkbox]{flex:none}
+
 </style>
 </head>
 <body>
@@ -488,11 +501,11 @@ async function copy(text, label) {
   }
 }
 
-function modal(build) {
+function modal(build, onClose) {
   const wrap = h('div', { class: 'modal-wrap' });
   const box = h('div', { class: 'modal' });
   wrap.appendChild(box);
-  const close = () => wrap.remove();
+  const close = () => { wrap.remove(); if (onClose) onClose(); };
   wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
   build(box, close);
   document.body.appendChild(wrap);
@@ -805,10 +818,17 @@ function endpointCard(spec, o) {
       bus.addEventListener('ctx', sync);
     }
     inputs[f.n] = inp;
+    const kind = f.pick || (f.ctx && PICKERS[f.ctx] ? f.ctx : '');
+    let shown = inp;
+    if (kind && PICKERS[kind] && (inp.tagName === 'INPUT' || inp.tagName === 'TEXTAREA') && inp.type !== 'file') {
+      const po = { multi: f.type === 'list', value: f.pickValue, cx: kind === 'file_id' ? () => (inputs.listing_id ? inputs.listing_id.value : S.ctx.listing_id) : (kind === 'review_id' ? () => (inputs.user_id ? inputs.user_id.value : S.ctx.user_id) : undefined) };
+      if (f.pick) po.noCtx = true;
+      shown = pickField(inp, kind, po);
+    }
     const label = (f.label || f.n) + (f.req ? ' *' : '');
     const wrapEl = f.type === 'bool'
       ? h('label', { class: 'chk' }, inp, label)
-      : field(label, inp, f.hint ? '(' + f.hint + ')' : '');
+      : field(label, shown, f.hint ? '(' + f.hint + ')' : '');
     if (f.wide || f.type === 'textarea' || f.type === 'json') wrapEl.style.gridColumn = '1 / -1';
     fieldsEl.appendChild(wrapEl);
   });
@@ -914,6 +934,191 @@ function epCards(keys, o) {
   });
 }
 
+/* ====================== id pickers ====================== */
+const nameOfUser = (u) => u.fullName || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || u.email || idOf(u) || u.userId || '';
+const userItem = (u) => ({ id: idOf(u) || u.userId, title: nameOfUser(u), sub: u.email || '', email: u.email, chip: u.role ? pretty(u.role) : '' });
+const listingItem = (l) => ({ id: idOf(l), title: l.title || '(untitled)', sub: [l.city, l.category ? pretty(l.category) : ''].filter(Boolean).join(', '), thumb: listingImages(l)[0], chip: l.status ? pretty(l.status) : '', extra: { owner_id: l.ownerId } });
+const bookingItem = (b) => ({ id: idOf(b), title: fmtDate(b.checkIn) + ' to ' + fmtDate(b.checkOut), sub: (b.totalAmount !== undefined ? fmtMoney(b.totalAmount, b.currency || 'USD') + ', ' : '') + 'listing ' + (b.listingId || ''), chip: b.status ? pretty(b.status) : '', extra: { escrow_hold_reference: 'booking-' + idOf(b) } });
+const interestItem = (i) => ({ id: idOf(i), title: i.listingTitle || 'Interest', sub: i.message || '', chip: '' });
+
+async function fetchItems(path, query, map, anon, svc) {
+  const res = await api(svc || 'listing', path, { query, anon: !!anon });
+  if (!res.ok) return { items: [], error: res.status === 401 ? 'Sign in as the right persona to list these (' + personaLabel(S.active) + ' is active).' : errText(res) };
+  const list = asList(res.data) || [];
+  return { items: list.map(map).filter((x) => x.id) };
+}
+
+const PICKERS = {
+  listing_id: {
+    title: 'Find a listing', placeholder: 'Search by title, city or id',
+    sources: () => [
+      { label: 'All listings', server: true, load: (q) => fetchItems('/listings/search', { query: q }, listingItem, true) },
+      { label: 'My listings', load: () => fetchItems('/listings/me', {}, listingItem) }
+    ].concat(S.ctx.owner_id ? [{ label: 'By working owner', load: () => fetchItems('/listings/owner/' + encodeURIComponent(S.ctx.owner_id), {}, listingItem, true) }] : [])
+  },
+  owner_id: {
+    title: 'Find an owner', placeholder: 'Search by name, email or id',
+    sources: () => [
+      { label: 'From listings', server: true, load: async (q) => {
+        const r = await fetchItems('/listings/search', { query: q }, (l) => ({ id: l.ownerId, title: 'Owner ' + l.ownerId, sub: 'Owns ' + (l.title || ''), owned: l.title }), true);
+        const seen = {}; r.items.forEach((x) => { if (seen[x.id]) seen[x.id].sub += ', ' + x.owned; else seen[x.id] = x; });
+        r.items = Object.values(seen); return r;
+      } },
+      { label: 'People', server: true, load: (q) => q ? fetchItems('/social/profile/search', { query: q }, userItem) : fetchItems('/social/profile/all', {}, userItem) }
+    ]
+  },
+  user_id: {
+    title: 'Find a user', placeholder: 'Search by name, email or id',
+    sources: () => [
+      { label: 'People', server: true, load: (q) => q ? fetchItems('/social/profile/search', { query: q }, userItem) : fetchItems('/social/profile/all', {}, userItem) },
+      { label: 'Me', load: async () => ({ items: me().userId ? [{ id: me().userId, title: 'You, signed in as ' + personaLabel(S.active), sub: me().email || '', email: me().email }] : [], error: me().userId ? '' : 'Not signed in as ' + personaLabel(S.active) + '.' }) }
+    ]
+  },
+  booking_id: {
+    title: 'Find a booking', placeholder: 'Filter by date, status, listing or id',
+    sources: () => [
+      { label: 'My bookings', load: () => fetchItems('/bookings/me', { size: 50, sort: 'createdAt,desc' }, bookingItem) },
+      { label: 'Received', load: () => fetchItems('/bookings/received', { size: 50, sort: 'createdAt,desc' }, bookingItem) },
+      { label: 'Needs review', load: () => fetchItems('/admin/bookings/needs-review', { size: 50 }, bookingItem) }
+    ]
+  },
+  interest_id: {
+    title: 'Find an interest', placeholder: 'Filter by listing or message',
+    sources: () => [
+      { label: 'Sent by me', load: () => fetchItems('/interests/me', { size: 50 }, interestItem) },
+      { label: 'Received', load: () => fetchItems('/interests/received', { size: 50 }, interestItem) }
+    ]
+  },
+  file_id: {
+    title: 'Find an image', placeholder: 'Filter by id', context: { key: 'listing_id', label: 'Listing', kind: 'listing_id' },
+    sources: () => [{ label: 'Images on the listing', load: async (q, cx) => {
+      if (!cx) return { items: [], error: 'Choose a listing first.' };
+      const res = await api('listing', '/listings/' + encodeURIComponent(cx), { anon: true });
+      if (!res.ok) return { items: [], error: errText(res) };
+      const l = unwrap(res.data) || {}; const main = l.mainImageUrl;
+      return { items: listingImages(l).map((u, i) => ({ id: fileIdOf(u), title: 'Image ' + (i + 1), sub: fileIdOf(u), thumb: u, chip: u === main ? 'Cover' : '' })).filter((x) => x.id) };
+    } }]
+  },
+  block_id: {
+    title: 'Find a blocked range', placeholder: 'Filter by listing or id',
+    sources: () => [{ label: 'Blocked from this console', load: async () => ({ items: store.get('pl-blocks', []).map((b) => ({ id: b.blockId, title: b.from + ' to ' + b.to, sub: 'listing ' + b.listingId })), note: 'The API has no list endpoint for blocks, so only ranges blocked from this page appear.' }) }]
+  },
+  review_id: {
+    title: 'Find a review', placeholder: 'Filter by comment', context: { key: 'user_id', label: 'Reviews about', kind: 'user_id', fallback: () => me().userId },
+    sources: () => [{ label: 'Reviews', load: async (q, cx) => {
+      if (!cx) return { items: [], error: 'Choose a user first.' };
+      return fetchItems('/social/reviews/' + encodeURIComponent(cx), {}, (r) => ({ id: r.id || r.reviewId, title: (r.rating !== undefined ? r.rating + ' of 5. ' : '') + (r.comment || ''), sub: r.reviewerName || r.reviewerId || '', chip: '' }));
+    } }]
+  },
+  escrow_hold_reference: {
+    title: 'Find an escrow reference', placeholder: 'Filter by booking id, date or status',
+    sources: () => [['Hold', 'booking-'], ['Release', 'booking-release-'], ['Refund', 'booking-refund-'], ['Payout', 'booking-payout-']].map(([label, pre]) => ({
+      label,
+      load: async () => {
+        const [a, b] = await Promise.all([fetchItems('/bookings/me', { size: 50, sort: 'createdAt,desc' }, bookingItem), fetchItems('/bookings/received', { size: 50, sort: 'createdAt,desc' }, bookingItem)]);
+        const seen = {}; const items = [];
+        a.items.concat(b.items).forEach((it) => { if (!seen[it.id]) { seen[it.id] = 1; items.push(Object.assign({}, it, { id: pre + it.id, sub: pre + it.id + (it.sub ? ', ' + it.sub : ''), extra: { booking_id: it.id } })); } });
+        return { items, error: items.length ? '' : (a.error || b.error || '') };
+      }
+    }))
+  }
+};
+
+/* Resolves to { value, extra } or null. */
+function openPicker(kind, current, o) {
+  o = o || {};
+  const def = PICKERS[kind];
+  return new Promise((resolve) => {
+    modal((box, close) => {
+      box.style.width = 'min(720px,100%)';
+      const sources = def.sources();
+      const st = { src: 0, q: '', items: [], error: '', note: '', loading: true, cx: def.context ? ((o.cx && o.cx()) || S.ctx[def.context.key] || (def.context.fallback && def.context.fallback()) || '') : '' };
+      const chosen = new Set(String(current || '').split(',').map((x) => x.trim()).filter(Boolean));
+      const search = h('input', { type: 'text', placeholder: def.placeholder, 'aria-label': 'Search' });
+      const tabs = h('div', { class: 'pill-tabs' });
+      const ctxBar = h('div', { class: 'row', style: { margin: '10px 0 0' } });
+      const list = h('div', { class: 'pick-list' });
+      const foot = h('div', { class: 'row', style: { justifyContent: 'space-between', marginTop: '12px' } });
+      let timer = null; let seq = 0;
+
+      const finish = (v) => { resolve(v); close(); };
+      const valueOf = (it) => (o.value === 'email' && it.email ? it.email : it.id);
+
+      async function load() {
+        const mine = ++seq; st.loading = true; draw();
+        const r = await sources[st.src].load(st.q, st.cx);
+        if (mine !== seq) return;
+        st.items = r.items || []; st.error = r.error || ''; st.note = r.note || ''; st.loading = false; draw();
+      }
+      function drawTabs() {
+        clear(tabs);
+        if (sources.length < 2) { tabs.style.display = 'none'; return; }
+        sources.forEach((s, i) => tabs.appendChild(h('button', { class: i === st.src ? 'on' : '', onclick: () => { st.src = i; drawTabs(); load(); } }, s.label)));
+      }
+      function drawCtx() {
+        clear(ctxBar);
+        if (!def.context) return;
+        ctxBar.append(h('span', { class: 'muted' }, def.context.label), h('span', { class: 'mono' }, st.cx || 'none'),
+          h('button', { class: 'btn sm', onclick: async () => { const r = await openPicker(def.context.kind, st.cx); if (r) { st.cx = r.value; drawCtx(); load(); } } }, 'Change'));
+      }
+      function visible() {
+        const q = st.q.trim().toLowerCase();
+        if (!q) return st.items;
+        return st.items.filter((it) => (it.title + ' ' + it.sub + ' ' + it.id + ' ' + (it.email || '')).toLowerCase().includes(q));
+      }
+      function draw() {
+        clear(list);
+        if (st.loading) { list.appendChild(h('div', { class: 'empty' }, 'Loading...')); drawFoot(); return; }
+        if (st.error) list.appendChild(h('div', { class: 'notice warn' }, st.error));
+        if (st.note) list.appendChild(h('div', { class: 'muted tiny', style: { padding: '2px 2px 8px' } }, st.note));
+        const vis = visible();
+        if (!vis.length && !st.error) list.appendChild(h('div', { class: 'empty' }, st.q ? 'Nothing matches "' + st.q + '". You can still use it as typed.' : 'Nothing to show yet.'));
+        vis.forEach((it) => {
+          const val = valueOf(it);
+          const pick = () => { if (o.multi) { chosen.has(val) ? chosen.delete(val) : chosen.add(val); draw(); } else finish({ value: val, extra: it.extra || {} }); };
+          list.appendChild(h('div', { class: 'pick-row' + (chosen.has(val) || val === current ? ' on' : ''), role: 'button', tabindex: '0', onclick: pick, onkeydown: (e) => { if (e.key === 'Enter') pick(); } },
+            o.multi ? h('input', { type: 'checkbox', checked: chosen.has(val), tabindex: '-1' }) : null,
+            it.thumb ? h('img', { class: 'pick-thumb', src: withSize(it.thumb, 'thumb'), alt: '' }) : null,
+            h('div', { class: 'grow' }, h('div', { class: 'pick-title' }, it.title), it.sub ? h('div', { class: 'muted tiny' }, it.sub) : null, h('div', { class: 'idline' }, val)),
+            it.chip ? h('span', { class: 'chip' }, it.chip) : null));
+        });
+        drawFoot();
+      }
+      function drawFoot() {
+        clear(foot);
+        const q = st.q.trim();
+        foot.append(h('div', { class: 'row' },
+          q && !o.multi ? h('button', { class: 'btn', onclick: () => finish({ value: q, extra: {} }) }, 'Use "' + (q.length > 24 ? q.slice(0, 24) + '...' : q) + '" as typed') : null),
+          h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => finish(null) }, 'Cancel'),
+            o.multi ? h('button', { class: 'btn primary', onclick: () => finish({ value: [...chosen].join(','), extra: {} }) }, 'Use ' + chosen.size + ' selected') : null));
+      }
+      search.addEventListener('input', () => {
+        st.q = search.value;
+        if (sources[st.src].server) { clearTimeout(timer); timer = setTimeout(load, 280); } else draw();
+      });
+      search.addEventListener('keydown', (e) => { if (e.key === 'Escape') finish(null); });
+      box.append(h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '12px' } }, h('h3', null, def.title), tabs), search, ctxBar, h('div', { style: { height: '10px' } }), list, foot);
+      drawTabs(); drawCtx(); draw(); load(); search.focus();
+    }, () => resolve(null));
+  });
+}
+
+/* Wraps an id input with a Find button that opens the picker for its kind. */
+function pickField(input, kind, o) {
+  o = o || {};
+  const btn = h('button', { class: 'btn', type: 'button', title: 'Search instead of typing the id', onclick: async () => {
+    const r = await openPicker(kind, input.value, o);
+    if (!r) return;
+    input.value = r.value;
+    input.dataset.dirty = '1';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    if (o.onPick) o.onPick(r);
+    if (!o.noCtx && !o.value && !o.multi) { setCtx(kind, r.value); Object.keys(r.extra || {}).forEach((k) => { if (r.extra[k]) setCtx(k, r.extra[k]); }); }
+  } }, icon('search', 14), 'Find');
+  return h('div', { class: 'idpick' }, input, btn);
+}
+
 /* ====================== endpoint registry ====================== */
 (function () {
   const pad = (n) => String(n).padStart(2, '0');
@@ -959,7 +1164,7 @@ function epCards(keys, o) {
   listing('POST', '/listings/{listing_id}/images', 'Add images to a listing', [P('listing_id', 'listing_id'), { n: 'files', in: 'file', type: 'files', label: 'files', wide: true }], { body: 'multipart' });
   listing('DELETE', '/listings/{listing_id}/images/{file_id}', 'Remove an image', [P('listing_id', 'listing_id'), P('file_id', 'file_id')]);
   listing('PUT', '/listings/{listing_id}/images/cover', 'Set the cover image', [P('listing_id', 'listing_id'), B('fileId', { ctx: 'file_id', req: true })], { body: 'json' });
-  listing('PUT', '/listings/{listing_id}/images/order', 'Reorder images', [P('listing_id', 'listing_id'), B('fileIds', { type: 'list', hint: 'comma separated, in the order you want', wide: true })], { body: 'json' });
+  listing('PUT', '/listings/{listing_id}/images/order', 'Reorder images', [P('listing_id', 'listing_id'), B('fileIds', { pick: 'file_id', type: 'list', hint: 'comma separated, in the order you want', wide: true })], { body: 'json' });
   listing('GET', '/images/{file_id}', 'Get an image', [P('file_id', 'file_id'), Q('size', { type: 'select', opts: ['medium', 'thumb', 'original'] })], { auth: 'none', desc: 'Public. The browser fetches it as text here; use the gallery on a listing to see pictures.' });
 
   /* ---------- availability ---------- */
@@ -1045,7 +1250,7 @@ function epCards(keys, o) {
   W('POST', '/wallet/create', 'Create wallet');
   W('POST', '/wallet/statement', 'Wallet statement', [B('fromDate', { type: 'date', def: dd(-30) }), B('toDate', { type: 'date', def: dd(0) }), B('type', { ph: 'optional' })], { body: 'json' });
   W('POST', '/internal/escrow/hold', 'Escrow: hold a payment', [
-    B('senderUserId', { ctx: 'user_id', req: true }), B('beneficiaryEmail', { req: true }), B('amount', { type: 'number', def: 100 }),
+    B('senderUserId', { ctx: 'user_id', req: true }), B('beneficiaryEmail', { req: true, pick: 'user_id', pickValue: 'email', hint: 'search for a user to fill their email' }), B('amount', { type: 'number', def: 100 }),
     B('description', { def: 'Booking escrow test' }), B('reference', { def: 'escrow-' + Date.now() }), B('initiatedBy', { def: 'LISTING_SERVICE' })
   ], { body: 'json', auth: 'apikey', desc: 'Uses the internal API key from Settings.' });
   W('POST', '/internal/escrow/{escrow_hold_reference}/payouts', 'Escrow: pay out of a hold', [
@@ -1589,7 +1794,7 @@ function listingForm(preloadId) {
   if (preloadId) setTimeout(() => load(), 0);
   return h('div', { class: 'card' },
     h('div', { class: 'card-h' }, h('h3', null, 'Create or edit a listing'), h('span', { class: 'tag' }, 'POST or PUT /listings')),
-    h('div', { class: 'row', style: { marginBottom: '12px' } }, h('div', { style: { flex: 1, minWidth: '240px' } }, idIn),
+    h('div', { class: 'row', style: { marginBottom: '12px' } }, h('div', { style: { flex: 1, minWidth: '240px' } }, pickField(idIn, 'listing_id', { onPick: () => load() })),
       h('button', { class: 'btn', onclick: (e) => load(e.currentTarget) }, 'Load listing'), h('button', { class: 'btn', onclick: () => { idIn.value = ''; sample(); } }, 'Fill sample'),
       h('label', { class: 'chk tiny' }, showAll, 'Show every field')),
     grid,
@@ -1654,7 +1859,7 @@ function imageManager() {
   root.append(
     h('div', { class: 'card' },
       h('div', { class: 'card-h' }, h('h3', null, 'Image manager'), h('span', { class: 'tag' }, '/listings/{id}/images')),
-      h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '240px' } }, idIn), h('button', { class: 'btn', onclick: (e) => load(e.currentTarget) }, 'Load images')),
+      h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '240px' } }, pickField(idIn, 'listing_id', { onPick: () => load() })), h('button', { class: 'btn', onclick: (e) => load(e.currentTarget) }, 'Load images')),
       h('div', { style: { height: '10px' } }), msg, area,
       h('div', { class: 'hr' }),
       h('div', { class: 'row' }, field('Add images', addFiles), h('button', { class: 'btn primary', style: { alignSelf: 'flex-end' }, onclick: (e) => {
@@ -1664,7 +1869,7 @@ function imageManager() {
       } }, 'Upload to listing'))),
     h('div', { class: 'card' },
       h('div', { class: 'card-h' }, h('h3', null, 'Public image endpoint'), h('span', { class: 'tag' }, 'GET /images/{fileId}?size=')),
-      h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '220px' } }, sizeFid), sizeSel, h('button', { class: 'btn', onclick: async () => {
+      h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '220px' } }, pickField(sizeFid, 'file_id', { cx: () => idIn.value || S.ctx.listing_id })), sizeSel, h('button', { class: 'btn', onclick: async () => {
         const url = buildUrl('listing', '/images/' + encodeURIComponent(sizeFid.value), { size: sizeSel.value });
         clear(sizeOut).appendChild(h('div', null, h('div', { class: 'path', style: { marginBottom: '6px' } }, url), h('img', { src: url, style: { maxWidth: '100%', maxHeight: '320px', borderRadius: '10px' }, onerror: (e) => { e.target.replaceWith(h('div', { class: 'notice bad' }, 'Image did not load (check the file id and the service).')); } })));
       } }, 'Show')), h('div', { style: { height: '8px' } }), sizeOut),
@@ -1706,7 +1911,7 @@ function datesPanel() {
   return h('div', { class: 'col' },
     h('div', { class: 'card' },
       h('div', { class: 'card-h' }, h('h3', null, 'Availability and blocked dates'), h('span', { class: 'tag' }, '/listings/{id}/availability, /blocked-dates')),
-      h('div', { class: 'row', style: { marginBottom: '10px' } }, h('div', { style: { flex: 1, minWidth: '240px' } }, idIn), h('button', { class: 'btn', onclick: mount }, 'Load calendar')),
+      h('div', { class: 'row', style: { marginBottom: '10px' } }, h('div', { style: { flex: 1, minWidth: '240px' } }, pickField(idIn, 'listing_id')), h('button', { class: 'btn', onclick: mount }, 'Load calendar')),
       h('div', { class: 'grid g2' }, calHolder,
         h('div', { class: 'col' }, h('div', { class: 'grid g2' }, field('Block from', from), field('Block to (stays open)', to)),
           h('button', { class: 'btn primary', onclick: async (e) => {
@@ -1835,7 +2040,7 @@ function escrowTracker(initialRef) {
   };
   const box = h('div', { class: 'col' },
     h('div', { class: 'notice' }, 'The listing service writes these references: booking-ID (hold), booking-release-ID (owner payout after check-in), booking-refund-ID (refund to tenant), booking-payout-ID (owner share after a late cancel). Needs the internal API key in Settings.'),
-    h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '260px' } }, ref), h('button', { class: 'btn primary', onclick: (e) => lookup(e.currentTarget) }, 'Look up hold'),
+    h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '260px' } }, pickField(ref, 'escrow_hold_reference', { onPick: () => lookup() })), h('button', { class: 'btn primary', onclick: (e) => lookup(e.currentTarget) }, 'Look up hold'),
       h('button', { class: 'btn', onclick: () => { ref.value = 'booking-' + S.ctx.booking_id; lookup(); } }, 'Use working booking')),
     out);
   if (ref.value) setTimeout(() => lookup(), 0);
@@ -2000,7 +2205,10 @@ function openIds() {
     const inputs = {};
     box.append(h('h3', null, 'Working ids'), h('p', { class: 'muted', style: { margin: '4px 0 14px' } }, 'Endpoint forms fill these in for you, and creating something sets the matching id.'));
     const grid = h('div', { class: 'grid g2' });
-    CTX_KEYS.forEach((k) => { inputs[k] = h('input', { type: 'text', value: S.ctx[k], placeholder: 'none' }); grid.appendChild(field(k, inputs[k])); });
+    CTX_KEYS.forEach((k) => {
+      inputs[k] = h('input', { type: 'text', value: S.ctx[k], placeholder: 'none' });
+      grid.appendChild(field(k, PICKERS[k] ? pickField(inputs[k], k, { noCtx: true, cx: k === 'file_id' ? () => inputs.listing_id.value : k === 'review_id' ? () => inputs.user_id.value : undefined, onPick: (r) => Object.keys(r.extra || {}).forEach((x) => { if (r.extra[x] && inputs[x]) inputs[x].value = r.extra[x]; }) }) : inputs[k]));
+    });
     box.append(grid);
     const m = me();
     if (m.userId) box.append(h('div', { class: 'row', style: { margin: '14px 0 0' } }, h('span', { class: 'muted' }, 'Signed in as user'), h('span', { class: 'mono' }, m.userId), h('button', { class: 'btn sm', onclick: () => { inputs.user_id.value = m.userId; } }, 'Use as user id')));
