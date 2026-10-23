@@ -1,0 +1,2360 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Premisave Listing Console</title>
+<style>
+:root{
+  --canvas:#f4f5f7; --panel:#ffffff; --sunken:#f8f9fb; --hover:#f1f3f6;
+  --line:#e3e6eb; --line2:#cdd3db;
+  --ink:#14181f; --ink2:#4b5563; --ink3:#7a8494;
+  --accent:#0b6b57; --accent-h:#095646; --accent-ink:#ffffff; --accent-soft:#e2f1ed; --accent-line:#a9d5c9;
+  --ok:#15803d; --ok-soft:#e6f4ea; --warn:#a15c07; --warn-soft:#fcf1dc; --bad:#b42318; --bad-soft:#fdecea; --info:#1d4ed8; --info-soft:#e8eefd;
+  --side:#0f1419; --side-ink:#a8b2be; --side-dim:#6b7684; --side-hi:#ffffff; --side-line:#1d2530; --side-act:#18212b; --mark:#3cc9a5;
+  --pop:0 12px 32px rgba(15,20,25,.18),0 2px 6px rgba(15,20,25,.1);
+  --sans:"Inter","Segoe UI Variable Text","Segoe UI",ui-sans-serif,system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --side-w:240px;
+}
+[data-theme="dark"]{
+  --canvas:#0c0f13; --panel:#12171d; --sunken:#0e1217; --hover:#18202a;
+  --line:#222a33; --line2:#313b47;
+  --ink:#e8ecf1; --ink2:#a3adba; --ink3:#6e7886;
+  --accent:#34c3a0; --accent-h:#4cd3b1; --accent-ink:#04231b; --accent-soft:#11302a; --accent-line:#1f5a4c;
+  --ok:#4ade80; --ok-soft:#10301e; --warn:#fbbf24; --warn-soft:#33260b; --bad:#f87171; --bad-soft:#3a1816; --info:#7aa2ff; --info-soft:#16223f;
+  --side:#080b0e; --side-line:#161d26; --side-act:#121a23;
+  --pop:0 14px 36px rgba(0,0,0,.6),0 2px 6px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--canvas);color:var(--ink);font:13.5px/1.5 var(--sans);-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01"}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+h1,h2,h3,h4{margin:0;font-weight:600;letter-spacing:-.011em;color:var(--ink)}
+h2{font-size:21px;line-height:1.25} h3{font-size:14px} h4{font-size:12.5px;font-weight:600;color:var(--ink2)}
+code,pre,.mono{font-family:var(--mono);font-size:12px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hidden{display:none!important}
+.muted{color:var(--ink2)} .tiny{font-size:12px} .grow{flex:1;min-width:0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:12px}
+.gap-s{gap:6px}
+.ic{display:inline-grid;place-items:center;flex:none}
+.ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+
+/* shell */
+.shell{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;background:var(--side);color:var(--side-ink);display:flex;flex-direction:column;padding:14px 10px;overflow-y:auto;z-index:70}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 14px}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:var(--mark);display:grid;place-items:center;color:#06231b}
+.brand b{display:block;color:var(--side-hi);font-size:15px;font-weight:650;letter-spacing:-.015em;line-height:1.1}
+.brand small{display:block;color:var(--side-dim);font-size:12px;margin-top:2px}
+.nav-title{padding:16px 10px 6px;font-size:12px;color:var(--side-dim);font-weight:500}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;height:32px;padding:0 10px;border:0;border-radius:6px;background:none;color:var(--side-ink);cursor:pointer;text-align:left;font-weight:500;position:relative}
+.nav button:hover{background:#141b24;color:var(--side-hi)}
+.nav button.on{background:var(--side-act);color:var(--side-hi)}
+.nav button.on::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:3px;border-radius:0 3px 3px 0;background:var(--mark)}
+.side-foot{margin-top:auto;border-top:1px solid var(--side-line);padding-top:12px;display:flex;flex-direction:column;gap:2px}
+.who-box{display:flex;gap:10px;align-items:center;padding:6px 8px 10px}
+.avatar{width:30px;height:30px;border-radius:50%;background:#26323f;color:#e6edf3;display:grid;place-items:center;font-weight:600;font-size:12px;flex:none}
+.who-box select{background:#141b24;border:1px solid var(--side-line);color:var(--side-hi);height:30px;padding:0 8px;border-radius:6px;width:100%}
+.who-box small{display:block;color:var(--side-dim);font-size:12px;line-height:1.2;margin-bottom:3px}
+.foot-btn{display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border:0;background:none;color:var(--side-ink);border-radius:6px;cursor:pointer;width:100%;text-align:left;font-weight:500}
+.foot-btn:hover{background:#141b24;color:var(--side-hi)}
+.svc{display:flex;align-items:center;gap:8px;padding:6px 10px;color:var(--side-dim);font-size:12px;border:0;background:none;cursor:pointer;text-align:left;width:100%}
+.svc:hover{color:var(--side-hi)}
+.content{min-width:0;display:flex;flex-direction:column}
+.topline{position:sticky;top:0;z-index:40;background:var(--canvas);border-bottom:1px solid var(--line);min-height:52px;padding:8px 24px;display:flex;align-items:center;gap:12px}
+.topline h1{font-size:14px;font-weight:600;white-space:nowrap}
+.btn.menu-btn{display:none}
+.ctx-tags{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0;flex:0 1 auto}
+.ctx-tags::-webkit-scrollbar{display:none}
+.ctx-tag{flex:none;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 8px;background:var(--panel);border:1px solid var(--line);border-radius:5px;font-size:12px;color:var(--ink2);cursor:pointer;max-width:240px}
+.ctx-tag b{font-weight:500;color:var(--ink3)}
+.ctx-tag span{font:12px var(--mono);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctx-tag:hover{border-color:var(--line2)}
+.ctx-x{border:0;background:none;color:var(--ink3);cursor:pointer;width:18px;height:18px;border-radius:4px;display:grid;place-items:center;padding:0}
+.ctx-x:hover{background:var(--hover);color:var(--ink)}
+main{width:100%;max-width:1240px;margin:0 auto;padding:24px 24px 110px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.page-head p{margin:4px 0 0;color:var(--ink2);max-width:70ch}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto;scrollbar-width:none}
+.tabs button{border:0;background:none;padding:9px 0;margin-bottom:-1px;border-bottom:2px solid transparent;color:var(--ink2);font-weight:500;cursor:pointer;white-space:nowrap}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+
+/* controls */
+.btn{height:32px;border:1px solid var(--line2);background:var(--panel);padding:0 12px;border-radius:6px;cursor:pointer;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;color:var(--ink)}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{background:var(--accent-h);border-color:var(--accent-h)}
+.btn.sun{color:var(--warn);border-color:var(--warn)}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+.btn.danger:hover{background:var(--bad-soft)}
+.btn.danger.fill{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ink2)}
+.btn.sm{height:26px;padding:0 9px;font-size:12.5px;border-radius:5px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.busy::after{content:"";width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+label.f{display:flex;flex-direction:column;gap:5px;min-width:0}
+label.f>span{font-size:12px;font-weight:500;color:var(--ink2)}
+label.f>span em{font-style:normal;color:var(--ink3);font-weight:400}
+input[type=text],input[type=number],input[type=password],input[type=email],input[type=date],input[type=time],input[type=datetime-local],input[type=url],select,input:not([type]){height:32px;border:1px solid var(--line2);background:var(--panel);border-radius:6px;padding:0 10px;width:100%;min-width:0}
+textarea{border:1px solid var(--line2);background:var(--panel);border-radius:6px;padding:8px 10px;width:100%;min-width:0;font:12.5px/1.5 var(--mono);min-height:84px;resize:vertical}
+input:hover,select:hover,textarea:hover{border-color:var(--ink3)}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+input[type=file]{font-size:12.5px;width:100%}
+input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);margin:0}
+.chk{display:flex;align-items:center;gap:8px;font-weight:500}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))} .g3{grid-template-columns:repeat(3,minmax(0,1fr))} .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.auto{grid-template-columns:repeat(auto-fill,minmax(256px,1fr))}
+.auto-w{grid-template-columns:repeat(auto-fill,minmax(420px,1fr))}
+
+/* surfaces */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+.card.flat{background:var(--sunken)}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.card-h h3{flex:1;min-width:0}
+.tag{font:12px var(--mono);color:var(--ink3);white-space:nowrap}
+.chip{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;font-size:12px;font-weight:500;background:var(--hover);color:var(--ink2);white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)} .chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.warn,.chip.sun{background:var(--warn-soft);color:var(--warn)} .chip.info{background:var(--info-soft);color:var(--info)}
+.chip.brand{background:var(--accent-soft);color:var(--accent)}
+.method{display:inline-block;min-width:46px;text-align:center;font:600 10.5px var(--mono);letter-spacing:.02em;padding:3px 0;border-radius:4px}
+.m-GET{background:var(--ok-soft);color:var(--ok)} .m-POST{background:var(--warn-soft);color:var(--warn)} .m-PUT,.m-PATCH{background:var(--info-soft);color:var(--info)} .m-DELETE{background:var(--bad-soft);color:var(--bad)}
+.path{font:12px var(--mono);color:var(--ink2);word-break:break-all}
+.empty{padding:32px 16px;text-align:center;color:var(--ink3);border:1px dashed var(--line2);border-radius:8px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;font-size:13px;margin:0}
+.kv dt{color:var(--ink3)} .kv dd{margin:0;word-break:break-word;font-variant-numeric:tabular-nums}
+.hr{height:1px;background:var(--line);margin:14px 0;border:0}
+.notice{border-radius:6px;padding:9px 12px;font-size:13px;background:var(--info-soft);color:var(--info);border:1px solid color-mix(in srgb,var(--info) 18%,transparent)}
+.notice.warn{background:var(--warn-soft);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 22%,transparent)}
+.notice.bad{background:var(--bad-soft);color:var(--bad);border-color:color-mix(in srgb,var(--bad) 22%,transparent)}
+.notice.ok{background:var(--ok-soft);color:var(--ok);border-color:color-mix(in srgb,var(--ok) 22%,transparent)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ink3);display:inline-block;flex:none}
+.dot.ok{background:#3ccf8e} .dot.bad{background:#ef5b4f}
+
+/* listing cards */
+.lcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.lcard:hover{border-color:var(--line2)}
+.lcard .ph{position:relative;aspect-ratio:3/2;background:var(--sunken);display:grid;place-items:center;color:var(--ink3);cursor:pointer;overflow:hidden;border-bottom:1px solid var(--line)}
+.lcard .ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.lcard .ph .tags{position:absolute;left:8px;top:8px;display:flex;gap:5px;flex-wrap:wrap}
+.lcard .ph .tags .chip{background:rgba(255,255,255,.94);color:#14181f}
+.lcard .bd{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px;flex:1}
+.lcard .ttl{font-weight:600;font-size:14.5px;cursor:pointer;letter-spacing:-.01em}
+.lcard .ttl:hover{color:var(--accent)}
+.facts{display:flex;gap:12px;color:var(--ink3);font-size:12.5px;flex-wrap:wrap}
+.price{display:flex;flex-wrap:wrap;gap:2px 14px;font-variant-numeric:tabular-nums;font-weight:600;font-size:14px}
+.price small{font-weight:400;color:var(--ink3);font-size:12.5px}
+.lcard .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px}
+.idline{font:11.5px var(--mono);color:var(--ink3);cursor:pointer;word-break:break-all}
+.idline:hover{color:var(--accent)}
+
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:9px 12px;color:var(--ink3);font-size:12px;font-weight:500;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--sunken)}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr:hover td{background:var(--sunken)}
+.scroll{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+
+/* segmented control */
+.pill-tabs{display:inline-flex;background:var(--hover);border:1px solid var(--line);border-radius:7px;padding:2px;gap:2px}
+.pill-tabs button{border:0;background:none;height:26px;padding:0 11px;border-radius:5px;cursor:pointer;font-weight:500;color:var(--ink2)}
+.pill-tabs button:hover{color:var(--ink)}
+.pill-tabs button.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--line2)}
+
+/* toolbar for discover */
+.toolbar{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;margin-bottom:18px}
+.toolbar .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.toolbar .filters>*{flex:1 1 150px}
+.toolbar .filters>.btn{flex:none}
+
+/* endpoint card */
+.ep{border:1px solid var(--line);background:var(--panel);border-radius:8px;overflow:hidden}
+.ep-h{display:flex;align-items:center;gap:10px;padding:0 14px;min-height:42px;cursor:pointer}
+.ep-h:hover{background:var(--sunken)}
+.ep-h b{font-weight:600;white-space:nowrap}
+.ep-h .path{flex:1;min-width:0}
+.ep-h .car{color:var(--ink3);transition:transform .12s;width:14px;height:14px}
+.ep.open .car{transform:rotate(90deg)}
+.ep-b{display:none;padding:2px 14px 16px;border-top:1px solid var(--line)}
+.ep.open .ep-b{display:block}
+.ep-b .desc{color:var(--ink2);margin:12px 0}
+.ep-b .grid{margin-top:12px}
+.fields{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.res{margin-top:14px;border:1px solid var(--line);border-radius:6px;background:var(--sunken);overflow:hidden}
+.res-h{display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap;background:var(--panel)}
+.res-b{padding:12px;max-height:480px;overflow:auto}
+.pre{font:12px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;margin:0}
+.j-k{color:var(--info)} .j-s{color:var(--ok)} .j-n{color:var(--warn)} .j-b{color:#9a4fb0} .j-z{color:var(--ink3)}
+[data-theme="dark"] .j-b{color:#c79bf0}
+details.jv>summary{cursor:pointer;list-style:none;font:12px var(--mono)}
+details.jv>summary::-webkit-details-marker{display:none}
+details.jv>summary::before{content:"+";display:inline-block;width:14px;color:var(--ink3)}
+details.jv[open]>summary::before{content:"\2212"}
+.jv-in{margin-left:6px;border-left:1px solid var(--line);padding-left:12px;font:12px/1.6 var(--mono)}
+.stat{display:inline-block;font:600 11.5px var(--mono);padding:2px 6px;border-radius:4px}
+.s2{background:var(--ok-soft);color:var(--ok)} .s3{background:var(--info-soft);color:var(--info)} .s4{background:var(--warn-soft);color:var(--warn)} .s5,.s0{background:var(--bad-soft);color:var(--bad)}
+
+/* calendar */
+.cal{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--panel)}
+.cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-weight:600}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-d{height:34px;display:grid;place-items:center;border-radius:5px;font-size:12.5px;cursor:pointer;font-variant-numeric:tabular-nums}
+.cal-d:hover{background:var(--hover)}
+.cal-d.dow{color:var(--ink3);font-weight:500;font-size:12px;cursor:default}
+.cal-d.dow:hover{background:none}
+.cal-d.off{color:var(--ink3);text-decoration:line-through;cursor:not-allowed;background:repeating-linear-gradient(135deg,transparent 0 5px,var(--hover) 5px 6px)}
+.cal-d.sel{background:var(--accent);color:var(--accent-ink)}
+.cal-d.rng{background:var(--accent-soft);color:var(--accent)}
+.cal-d.past{opacity:.38}
+.cal-d.blank{cursor:default}
+.cal-d.blank:hover{background:none}
+
+/* gallery */
+.gal{display:flex;flex-direction:column;gap:8px}
+.gal .big{position:relative;aspect-ratio:16/9;max-height:340px;border-radius:8px;overflow:hidden;background:var(--sunken);border:1px solid var(--line);display:grid;place-items:center;color:var(--ink3)}
+.gal .big img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap}
+.thumb{width:84px;height:60px;padding:0;border:1px solid var(--line2);border-radius:6px;overflow:hidden;background:var(--sunken);cursor:pointer;opacity:.75}
+.thumb:hover{opacity:1}
+.thumb.on{opacity:1;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.imgman{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.imgman figure{margin:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.imgman img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.imgman figcaption{padding:8px;display:flex;gap:5px;flex-wrap:wrap}
+
+/* overlays */
+.scrim{position:fixed;inset:0;background:rgba(8,11,14,.5);z-index:90;display:flex;justify-content:flex-end}
+.drawer{width:min(800px,100%);background:var(--canvas);height:100%;overflow:auto;box-shadow:var(--pop);animation:slide .16s ease-out}
+@keyframes slide{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.drawer-h{position:sticky;top:0;z-index:2;background:var(--panel);border-bottom:1px solid var(--line);padding:0 20px;min-height:52px;display:flex;align-items:center;gap:10px}
+.drawer-b{padding:20px;display:flex;flex-direction:column;gap:16px}
+.modal-wrap{position:fixed;inset:0;background:rgba(8,11,14,.55);z-index:110;display:grid;place-items:center;padding:16px}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;width:min(560px,100%);box-shadow:var(--pop);max-height:92vh;overflow:auto}
+#toasts{position:fixed;right:16px;bottom:56px;z-index:130;display:flex;flex-direction:column;gap:8px;width:min(340px,calc(100% - 32px))}
+.toast{background:#171d25;color:#f1f4f8;padding:10px 14px;border-radius:6px;box-shadow:var(--pop);border-left:3px solid #6b7684;animation:slide .14s;font-size:13px}
+.toast.bad{border-left-color:#f0655b} .toast.ok{border-left-color:#3ccf8e}
+
+/* request inspector */
+.dock{position:fixed;left:var(--side-w);right:0;bottom:0;z-index:60;background:var(--panel);border-top:1px solid var(--line2)}
+.dock-bar{display:flex;align-items:center;gap:10px;padding:0 24px;height:38px;cursor:pointer}
+.dock-body{height:min(46vh,420px);display:none;border-top:1px solid var(--line)}
+.dock.open .dock-body{display:grid;grid-template-columns:minmax(280px,38%) 1fr}
+.logl{overflow:auto;border-right:1px solid var(--line)}
+.logr{padding:7px 12px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;gap:8px;align-items:center;font-size:12.5px}
+.logr:hover{background:var(--sunken)}
+.logr.on{background:var(--accent-soft)}
+.logd{overflow:auto;padding:14px 18px}
+
+/* guide */
+.steps{display:grid;gap:14px;padding:0;margin:0;counter-reset:s}
+.steps>li{list-style:none;counter-increment:s;display:grid;grid-template-columns:24px 1fr;gap:12px;align-items:start}
+.steps>li::before{content:counter(s);width:24px;height:24px;border-radius:50%;border:1px solid var(--line2);background:var(--panel);color:var(--ink2);display:grid;place-items:center;font-weight:600;font-size:12px;font-variant-numeric:tabular-nums}
+.stack{display:flex;flex-direction:column}
+.statusrow{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.statusrow:last-child{border-bottom:0}
+
+@media(max-width:960px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;left:0;top:0;bottom:0;width:260px;transform:translateX(-102%);transition:transform .18s}
+  .shell.menu-open .side{transform:none;box-shadow:var(--pop)}
+  .shell.menu-open::after{content:"";position:fixed;inset:0;background:rgba(8,11,14,.5);z-index:65}
+  .btn.menu-btn{display:inline-flex}
+  .dock{left:0}
+  .topline,.dock-bar{padding-left:14px;padding-right:14px}
+  main{padding:18px 14px 110px}
+  .g2,.g3,.g4,.auto-w{grid-template-columns:1fr}
+  .dock.open .dock-body{grid-template-columns:1fr;grid-template-rows:40% 60%}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.toolbar .pill-tabs{align-self:flex-start}
+.btn.sm.ghost{color:var(--ink2)}
+
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toasts"></div>
+<script>
+const EXPLORER = [{"folder":"Listing / Listings CRUD","name":"Create Listing","method":"POST","url":"{{base_url_listing}}/listings","headers":[],"body":{"mode":"formdata","form":[{"k":"request","t":"text","v":"{\n  \"title\": \"Cozy Studio in Kilimani\",\n  \"description\": \"Bright, modern studio near Yaya Centre. Perfect for a quick day-use meeting or an overnight stay.\",\n  \"category\": \"SHORT_TERM_RENTAL\",\n  \"pricePerDay\": 40,\n  \"pricePerNight\": 55,\n  \"latitude\": -1.2921,\n  \"longitude\": 36.7833,\n  \"address\": \"Argwings Kodhek Road\",\n  \"city\": \"Nairobi\",\n  \"country\": \"Kenya\",\n  \"maxGuests\": 2,\n  \"cancellationPolicy\": \"MODERATE\",\n  \"bedrooms\": 1,\n  \"bathrooms\": 1,\n  \"hasWifi\": true,\n  \"hasKitchen\": true,\n  \"amenities\": [\"Parking\", \"Backup Generator\"]\n}"},{"k":"files","t":"file","v":""}]},"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Update Listing","method":"PUT","url":"{{base_url_listing}}/listings/{{listing_id}}","headers":[],"body":{"mode":"formdata","form":[{"k":"request","t":"text","v":"{\n  \"title\": \"Updated Luxury Apartment\",\n  \"description\": \"New description...\",\n  \"price\": 9500,\n  \"city\": \"Nairobi\"\n}"}]},"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Archive Listing","method":"POST","url":"{{base_url_listing}}/listings/{{listing_id}}/archive","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Unarchive Listing","method":"POST","url":"{{base_url_listing}}/listings/{{listing_id}}/unarchive","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Delete Listing","method":"DELETE","url":"{{base_url_listing}}/listings/{{listing_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Upload Images","method":"POST","url":"{{base_url_listing}}/listings/upload-images","headers":[],"body":{"mode":"formdata","form":[{"k":"files","t":"file","v":""}]},"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Get Listing by ID","method":"GET","url":"{{base_url_listing}}/listings/{{listing_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Get Short Term Rentals","method":"GET","url":"{{base_url_listing}}/listings/short-term?city=Nairobi","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Get My Listings","method":"GET","url":"{{base_url_listing}}/listings/me","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Get Listings by Owner","method":"GET","url":"{{base_url_listing}}/listings/owner/{{owner_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listings CRUD","name":"Search Listings","method":"GET","url":"{{base_url_listing}}/listings/search","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Listing images","name":"Add images to a listing","method":"POST","url":"{{base_url_listing}}/listings/{{listing_id}}/images","headers":[],"body":{"mode":"formdata","form":[{"k":"files","t":"file","v":""}]},"auth":"home_owner_token"},{"folder":"Listing / Listing images","name":"Remove an image","method":"DELETE","url":"{{base_url_listing}}/listings/{{listing_id}}/images/{{file_id}}","headers":[],"body":null,"auth":"home_owner_token"},{"folder":"Listing / Listing images","name":"Set the cover image","method":"PUT","url":"{{base_url_listing}}/listings/{{listing_id}}/images/cover","headers":[{"k":"Content-Type","v":"application/json","off":false}],"body":{"mode":"raw","raw":"{\n  \"fileId\": \"{{file_id}}\"\n}"},"auth":"home_owner_token"},{"folder":"Listing / Listing images","name":"Reorder images","method":"PUT","url":"{{base_url_listing}}/listings/{{listing_id}}/images/order","headers":[{"k":"Content-Type","v":"application/json","off":false}],"body":{"mode":"raw","raw":"{\n  \"fileIds\": [\n    \"{{file_id}}\"\n  ]\n}"},"auth":"home_owner_token"},{"folder":"Listing / Listing images","name":"Get an image","method":"GET","url":"{{base_url_listing}}/images/{{file_id}}?size=medium","headers":[],"body":null,"auth":"none"},{"folder":"Listing / Availability","name":"Get availability","method":"GET","url":"{{base_url_listing}}/listings/{{listing_id}}/availability?from=2026-11-01&to=2026-11-30","headers":[],"body":null,"auth":"none"},{"folder":"Listing / Availability","name":"Block dates","method":"POST","url":"{{base_url_listing}}/listings/{{listing_id}}/blocked-dates","headers":[{"k":"Content-Type","v":"application/json","off":false}],"body":{"mode":"raw","raw":"{\n  \"from\": \"2026-12-24\",\n  \"to\": \"2026-12-27\"\n}"},"auth":"home_owner_token"},{"folder":"Listing / Availability","name":"Unblock dates","method":"DELETE","url":"{{base_url_listing}}/listings/{{listing_id}}/blocked-dates/{{block_id}}","headers":[],"body":null,"auth":"home_owner_token"},{"folder":"Listing / Admin listing","name":"Get All Listings","method":"GET","url":"{{base_url_listing}}/admin/listings?page=0&size=20&sort=createdAt,desc","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Get Soft Deleted Listings","method":"GET","url":"{{base_url_listing}}/admin/listings?deleted=true&page=0&size=20&sort=createdAt,desc","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Get Archived Listings","method":"GET","url":"{{base_url_listing}}/admin/listings?archived=true","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Get Listings by Status","method":"GET","url":"{{base_url_listing}}/admin/listings?status=PENDING&page=0&size=20&sort=createdAt,desc","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Get Single Listing","method":"GET","url":"{{base_url_listing}}/admin/listings/{{listing_id}}","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Approve Listing","method":"PUT","url":"{{base_url_listing}}/admin/listings/{{listing_id}}/approve","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Reject Listing","method":"PUT","url":"{{base_url_listing}}/admin/listings/{{listing_id}}/reject","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Archive Listing","method":"PUT","url":"{{base_url_listing}}/admin/listings/{{listing_id}}/archive","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Unarchive Listing","method":"PUT","url":"{{base_url_listing}}/admin/listings/{{listing_id}}/unarchive","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Soft Delete Listing","method":"DELETE","url":"{{base_url_listing}}/admin/listings/{{listing_id}}","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Restore Soft Deleted Listing","method":"PUT","url":"{{base_url_listing}}/admin/listings/{{listing_id}}/restore","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin listing","name":"Permanent Delete Listing","method":"DELETE","url":"{{base_url_listing}}/admin/listings/{{listing_id}}/hard-delete","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Location","name":"Nearby Listings","method":"GET","url":"{{base_url_listing}}/locations/nearby?latitude=-1.2921&longitude=36.8219&radiusKm=10","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Location","name":"Search by City","method":"GET","url":"{{base_url_listing}}/locations/city?city=Nairobi","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Location","name":"Listings in Map Bounds","method":"GET","url":"{{base_url_listing}}/locations/bounds?minLat=-1.3&maxLat=-1.2&minLng=36.7&maxLng=36.9","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile","name":"Get My Profile","method":"GET","url":"{{base_url_listing}}/social/profile/me","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile","name":"Get Specific User Profile","method":"GET","url":"{{base_url_listing}}/social/profile/user/{{user_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile","name":"Search Users","method":"GET","url":"{{base_url_listing}}/social/profile/search?query=graham","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile","name":"Get All Users","method":"GET","url":"{{base_url_listing}}/social/profile/all","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile views","name":"Record Profile View","method":"POST","url":"{{base_url_listing}}/social/views/{{user_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile views","name":"Who Viewed me","method":"GET","url":"{{base_url_listing}}/social/views/who-viewed-me","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile views","name":"Who I Viewed","method":"GET","url":"{{base_url_listing}}/social/views/who-i-viewed","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile views","name":"Get My Profile View Stats","method":"GET","url":"{{base_url_listing}}/social/views/stats","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Profile views","name":"Get Other Profile View Stats","method":"GET","url":"{{base_url_listing}}/social/views/stats/{{user_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Follow User","method":"POST","url":"{{base_url_listing}}/social/follow","headers":[],"body":{"mode":"raw","raw":"{\n  \"targetId\": \"{{user_id}}\"\n}"},"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Unfollow User","method":"DELETE","url":"{{base_url_listing}}/social/unfollow/{{user_id}}","headers":[],"body":{"mode":"raw","raw":"{\n  \"targetId\": \"{{user_id}}\"\n}"},"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Like User","method":"POST","url":"{{base_url_listing}}/social/like","headers":[],"body":{"mode":"raw","raw":"{\n  \"targetId\": \"{{user_id}}\"\n}"},"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Unlike User","method":"DELETE","url":"{{base_url_listing}}/social/unlike/{{user_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Create Review","method":"POST","url":"{{base_url_listing}}/social/review","headers":[],"body":{"mode":"raw","raw":"{\n  \"targetId\": \"{{user_id}}\",\n  \"rating\": 5,\n  \"comment\": \"Excellent service and very professional!\"\n}"},"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Edit Review","method":"PUT","url":"{{base_url_listing}}/social/review","headers":[],"body":{"mode":"raw","raw":"{\n  \"reviewId\": \"{{review_id}}\",\n  \"rating\": 4,\n  \"comment\": \"Updated review: Good but can improve response time.\"\n}"},"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Delete Review","method":"DELETE","url":"{{base_url_listing}}/social/review/{{review_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Get User reviews","method":"GET","url":"{{base_url_listing}}/social/reviews/{{user_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Get User Stats","method":"GET","url":"{{base_url_listing}}/social/stats/{{user_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Get My Likes","method":"GET","url":"{{base_url_listing}}/social/my-likes","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Auth client / Social","name":"Get My Following","method":"GET","url":"{{base_url_listing}}/social/my-following","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Promotion","name":"Promote a Listing","method":"POST","url":"{{base_url_listing}}/listings/promote","headers":[{"k":"Content-Type","v":" application/json","off":false},{"k":"Idempotency-Key","v":"{{listing_idempotency_key}}","off":false}],"body":{"mode":"raw","raw":"{\n  \"listingId\": \"6a9b43aa9bcdfd3c583e078d\",\n  \"days\": 10\n}"},"auth":"token"},{"folder":"Listing / Promotion","name":"Extend Promotion","method":"POST","url":"{{base_url_listing}}/listings/{{listing_id}}/extend?days=5","headers":[{"k":"Idempotency-Key","v":"{{listing_idempotency_key}}","off":false}],"body":null,"auth":"token"},{"folder":"Listing / Promotion","name":"Get my Promotions","method":"GET","url":"{{base_url_listing}}/listings/promotions/my?page=0&size=20&sort=createdAt,desc","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Currency","name":"Get All Rates","method":"GET","url":"{{base_url_listing}}/currency/rates","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Currency","name":"Get Single Rate","method":"GET","url":"{{base_url_listing}}/currency/rate?to=KES","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Currency","name":"Convert Amount","method":"GET","url":"{{base_url_listing}}/currency/convert?amount=100&to=KES","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Currency","name":"Get Supported Currencies","method":"GET","url":"{{base_url_listing}}/currency/supported","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Bookings","name":"Create Booking","method":"POST","url":"{{base_url_listing}}/bookings","headers":[{"k":"Content-Type","v":" application/json","off":false},{"k":"Idempotency-Key","v":"{{listing_idempotency_key}}","off":false}],"body":{"mode":"raw","raw":"{\n  \"listingId\": \"6a9b43aa9bcdfd3c583e078d\",\n  \"checkIn\": \"2026-10-10T14:00:00\",\n  \"checkOut\": \"2026-10-13T11:00:00\",\n  \"priceUnit\": \"PER_NIGHT\"\n}"},"auth":"token"},{"folder":"Listing / Bookings","name":"Cancel Booking","method":"POST","url":"{{base_url_listing}}/bookings/{{booking_id}}/cancel?reason=Change of plans","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Bookings","name":"Get cancellation quote","method":"GET","url":"{{base_url_listing}}/bookings/{{booking_id}}/cancellation-quote","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Bookings","name":"Get My Bookings (as tenant)","method":"GET","url":"{{base_url_listing}}/bookings/me?status=CONFIRMED&page=0&size=20&sort=createdAt,desc","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Bookings","name":"Get Received Bookings (as owner)","method":"GET","url":"{{base_url_listing}}/bookings/received?status=CANCELLED&page=0&size=20","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Admin bookings","name":"List bookings needing review","method":"GET","url":"{{base_url_listing}}/admin/bookings/needs-review?page=0&size=20","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin bookings","name":"Re-queue a failed payout","method":"POST","url":"{{base_url_listing}}/admin/bookings/{{booking_id}}/retry-payout","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Admin bookings","name":"Resolve an unconfirmed payment","method":"POST","url":"{{base_url_listing}}/admin/bookings/{{booking_id}}/resolve-payment?paid=true","headers":[],"body":null,"auth":"admin_token"},{"folder":"Listing / Interests","name":"Express Interest","method":"POST","url":"{{base_url_listing}}/interests","headers":[{"k":"Content-Type","v":" application/json","off":false}],"body":{"mode":"raw","raw":"{\n  \"listingId\": \"{{listing_id}}\",\n  \"message\": \"Looking to move in next month, is it still available?\"\n}"},"auth":"token"},{"folder":"Listing / Interests","name":"Cancel Interest","method":"DELETE","url":"{{base_url_listing}}/interests/{{interest_id}}","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Interests","name":"Get My Interests","method":"GET","url":"{{base_url_listing}}/interests/me?page=0&size=20","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Interests","name":"Get Received Interests (leads on my listings)","method":"GET","url":"{{base_url_listing}}/interests/received?page=0&size=20","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Health","name":"Health Check","method":"GET","url":"{{base_url_listing}}/system/health","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Health","name":"Health Details","method":"GET","url":"{{base_url_listing}}/system/health/details","headers":[],"body":null,"auth":"token"},{"folder":"Listing / Health","name":"Test Token","method":"GET","url":"{{base_url_listing}}/system/test-token","headers":[],"body":null,"auth":"token"},{"folder":"Wallet / Wallet","name":"Create Wallet","method":"POST","url":"{{base_url_wallet}}/wallet/create","headers":[],"body":null,"auth":"token"},{"folder":"Wallet / Wallet","name":"Get Wallet Balance","method":"GET","url":"{{base_url_wallet}}/wallet/balance","headers":[],"body":null,"auth":"token"},{"folder":"Wallet / Wallet","name":"Get Wallet Statement","method":"POST","url":"{{base_url_wallet}}/wallet/statement","headers":[{"k":"Content-Type","v":" application/json","off":false}],"body":{"mode":"raw","raw":"{\n  \"fromDate\": \"2026-06-01\",\n  \"toDate\": \"2026-06-27\",\n  \"type\": null\n}"},"auth":"token"},{"folder":"Wallet / Payments & Fund Transfers","name":"Transfer Funds (Internal API Key)","method":"POST","url":"{{base_url_wallet}}/internal/transfer","headers":[{"k":"X-API-Key","v":" {{internal_api_key}}","off":false},{"k":"Content-Type","v":" application/json","off":false}],"body":{"mode":"raw","raw":"{\n    \"senderUserId\": \"69fb94e91b08bb5028283c2b\",\n    \"recipientAccountNumber\": \"{{recipient_email}}\",\n    \"amount\": 50.0,\n    \"description\": \"Maintenance fee split\",\n    \"initiatedBy\": \"PROPERTY_SERVICE\",\n    \"reference\": \"transfer-{{$timestamp}}\"\n}"},"auth":"none"},{"folder":"Wallet / Payments & Fund Transfers","name":"Get Transfer by Reference (Internal API Key)","method":"GET","url":"{{base_url_wallet}}/internal/transfer/{{transfer_reference}}","headers":[{"k":"X-API-Key","v":"{{internal_api_key}}","off":false}],"body":null,"auth":"none"},{"folder":"Wallet / Payments & Fund Transfers","name":"Escrow: Hold a Payment (Internal API Key)","method":"POST","url":"{{base_url_wallet}}/internal/escrow/hold","headers":[{"k":"X-API-Key","v":"{{internal_api_key}}","off":false},{"k":"Content-Type","v":"application/json","off":false}],"body":{"mode":"raw","raw":"{\n    \"senderUserId\": \"69fb94e91b08bb5028283c2b\",\n    \"beneficiaryEmail\": \"{{recipient_email}}\",\n    \"amount\": 100.00,\n    \"description\": \"Booking escrow test\",\n    \"reference\": \"escrow-{{$timestamp}}\",\n    \"initiatedBy\": \"LISTING_SERVICE\"\n}"},"auth":"none"},{"folder":"Wallet / Payments & Fund Transfers","name":"Escrow: Pay Out of a Hold (Internal API Key)","method":"POST","url":"{{base_url_wallet}}/internal/escrow/{{escrow_hold_reference}}/payouts","headers":[{"k":"X-API-Key","v":"{{internal_api_key}}","off":false},{"k":"Content-Type","v":"application/json","off":false}],"body":{"mode":"raw","raw":"{\n    \"recipientAccountNumber\": \"{{recipient_email}}\",\n    \"amount\": 100.00,\n    \"description\": \"Payout for booking escrow test\",\n    \"reference\": \"escrow-payout-{{$timestamp}}\",\n    \"initiatedBy\": \"LISTING_SERVICE\"\n}"},"auth":"none"},{"folder":"Wallet / Payments & Fund Transfers","name":"Escrow: Get a Hold and its Payouts (Internal API Key)","method":"GET","url":"{{base_url_wallet}}/internal/escrow/{{escrow_hold_reference}}","headers":[{"k":"X-API-Key","v":"{{internal_api_key}}","off":false}],"body":null,"auth":"none"}];
+'use strict';
+/* ====================== helpers ====================== */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === undefined || v === null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+      else if (k === 'value') el.value = v;
+      else if (k === 'checked') el.checked = !!v;
+      else if (k === 'html') el.innerHTML = v;
+      else if (v === true) el.setAttribute(k, '');
+      else el.setAttribute(k, v);
+    }
+  }
+  const add = (kid) => {
+    if (kid === null || kid === undefined || kid === false) return;
+    if (Array.isArray(kid)) return kid.forEach(add);
+    el.appendChild(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  };
+  kids.forEach(add);
+  return el;
+}
+const ICONS = {
+  compass: '<circle cx="12" cy="12" r="8.5"/><path d="M15.4 8.6l-2 4.8-4.8 2 2-4.8z"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>',
+  trips: '<rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5M3.5 12.5h17"/>',
+  host: '<path d="M4 11l8-6.5 8 6.5M6 9.8V19h12V9.8M10 19v-5h4v5"/>',
+  users: '<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 6.3a3 3 0 0 1 0 5.4M17.5 14a5 5 0 0 1 3 5"/>',
+  shield: '<path d="M12 3.5l7 2.8v5.4c0 4.2-2.9 7.6-7 8.8-4.1-1.2-7-4.6-7-8.8V6.3z"/><path d="M9 12l2.2 2.2L15.2 10"/>',
+  wallet: '<rect x="3.5" y="6.5" width="17" height="12.5" rx="2"/><path d="M3.5 10h17M16 14.5h1.5"/>',
+  tools: '<path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>',
+  code: '<path d="M8.5 8l-4 4 4 4M15.5 8l4 4-4 4M13.5 6l-3 12"/>',
+  moon: '<path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M18 6l-1.6 1.6M7.6 16.4L6 18"/>',
+  user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+  chevron: '<path d="M9 6l6 6-6 6"/>',
+  x: '<path d="M7 7l10 10M17 7L7 17"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  house: '<path d="M3 12l9-7 9 7M5.5 10.5V20h13v-9.5"/>',
+  land: '<path d="M3 16c3-3.5 6-3.5 9 0s6 3.5 9 0M3 11c3-3.5 6-3.5 9 0s6 3.5 9 0"/>',
+  doc: '<path d="M7 3.5h7l4 4V20.5H7zM14 3.5v4h4M9.5 12h5M9.5 15.5h5"/>'
+};
+function icon(name, size, cls) {
+  const s = h('span', { class: 'ic' + (cls ? ' ' + cls : ''), style: { width: (size || 16) + 'px', height: (size || 16) + 'px' } });
+  s.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
+  return s;
+}
+const clear = (el) => { while (el.firstChild) el.removeChild(el.firstChild); return el; };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* storage that survives a blocked localStorage */
+const mem = {};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? (k in mem ? mem[k] : d) : JSON.parse(v); } catch (e) { return k in mem ? mem[k] : d; } },
+  set(k, v) { mem[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } },
+  del(k) { delete mem[k]; try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+};
+
+/* ====================== state ====================== */
+const PERSONAS = [
+  { id: 'client', label: 'Tenant', hint: 'client_email / client_password' },
+  { id: 'home_owner', label: 'Home owner', hint: 'home_owner_email / home_owner_password' },
+  { id: 'admin', label: 'Admin', hint: 'admin_email / admin_password' },
+  { id: 'finance', label: 'Finance', hint: 'finance_email / finance_password' },
+  { id: 'custom', label: 'Custom', hint: 'any account' }
+];
+const CTX_KEYS = ['listing_id', 'owner_id', 'user_id', 'booking_id', 'file_id', 'block_id', 'review_id', 'interest_id', 'escrow_hold_reference'];
+
+const S = {
+  cfg: Object.assign({ listing: 'http://localhost:8082', auth: 'http://localhost:8080', wallet: 'http://localhost:8084', apiKey: '', timeout: 60 }, store.get('pl-cfg', {})),
+  personas: store.get('pl-personas', {}),
+  active: store.get('pl-active', 'client'),
+  ctx: Object.assign({}, store.get('pl-ctx', {})),
+  currency: store.get('pl-currency', 'USD'),
+  rates: null,
+  log: [],
+  logSeq: 0,
+  screen: store.get('pl-screen', 'guide')
+};
+CTX_KEYS.forEach((k) => { if (S.ctx[k] === undefined) S.ctx[k] = ''; });
+PERSONAS.forEach((p) => { if (!S.personas[p.id]) S.personas[p.id] = { email: '', password: '', token: '', refresh: '', userId: '', role: '' }; });
+
+const saveCfg = () => store.set('pl-cfg', S.cfg);
+const savePersonas = () => store.set('pl-personas', S.personas);
+const me = () => S.personas[S.active] || {};
+const bus = new EventTarget();
+const emit = (name, detail) => bus.dispatchEvent(new CustomEvent(name, { detail }));
+
+function setCtx(key, val, quiet) {
+  if (!CTX_KEYS.includes(key)) return;
+  val = val === undefined || val === null ? '' : String(val);
+  if (S.ctx[key] === val) return;
+  S.ctx[key] = val;
+  store.set('pl-ctx', S.ctx);
+  emit('ctx', { key, val, quiet });
+}
+
+function decodeJwt(t) {
+  try {
+    let p = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (p.length % 4) p += '=';
+    return JSON.parse(decodeURIComponent(escape(atob(p))));
+  } catch (e) { return {}; }
+}
+
+/* ====================== api ====================== */
+function maskAuth(hd) {
+  const o = Object.assign({}, hd);
+  if (o.Authorization) o.Authorization = 'Bearer ' + o.Authorization.slice(7, 17) + '...';
+  if (o['X-API-Key']) o['X-API-Key'] = o['X-API-Key'].slice(0, 4) + '...';
+  return o;
+}
+
+function buildUrl(svc, path, query) {
+  const base = (S.cfg[svc] || '').replace(/\/+$/, '');
+  let url = /^https?:\/\//i.test(path) ? path : base + path;
+  if (query) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) {
+      if (v === '' || v === undefined || v === null) continue;
+      if (Array.isArray(v)) v.forEach((x) => qs.append(k, x)); else qs.append(k, v);
+    }
+    const s = qs.toString();
+    if (s) url += (url.includes('?') ? '&' : '?') + s;
+  }
+  return url;
+}
+
+/* Never throws. Network failures come back as status 0. */
+async function api(svc, path, o) {
+  o = o || {};
+  const url = buildUrl(svc, path, o.query);
+  const headers = Object.assign({ Accept: 'application/json, text/plain, */*' }, o.headers || {});
+  const tok = o.token !== undefined ? o.token : me().token;
+  if (!o.anon && tok) headers.Authorization = 'Bearer ' + tok;
+  if (o.apiKey !== undefined ? o.apiKey : false) headers['X-API-Key'] = o.apiKey;
+  let body;
+  let reqPreview = null;
+  if (o.form) { body = o.form; reqPreview = '[multipart form-data]'; }
+  else if (o.json !== undefined) { body = JSON.stringify(o.json); headers['Content-Type'] = 'application/json'; reqPreview = o.json; }
+  else if (o.raw !== undefined) { body = o.raw; if (!headers['Content-Type']) headers['Content-Type'] = 'application/json'; reqPreview = o.raw; }
+  const method = (o.method || 'GET').toUpperCase();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), (S.cfg.timeout || 60) * 1000);
+  const t0 = performance.now();
+  const entry = { id: ++S.logSeq, t: new Date(), method, url, reqHeaders: maskAuth(headers), reqBody: reqPreview, status: 0, ms: 0, resBody: null, resHeaders: {}, svc };
+  let res;
+  try {
+    const r = await fetch(url, { method, headers, body, signal: ctl.signal });
+    const text = await r.text();
+    let data = text;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { /* plain text */ }
+    const rh = {};
+    r.headers.forEach((v, k) => { rh[k] = v; });
+    res = { ok: r.ok, status: r.status, data, text, headers: rh, ms: Math.round(performance.now() - t0), url, method };
+  } catch (e) {
+    const aborted = e && e.name === 'AbortError';
+    res = {
+      ok: false, status: 0, data: null, text: '', headers: {}, ms: Math.round(performance.now() - t0), url, method,
+      error: aborted ? 'Timed out after ' + S.cfg.timeout + 's' : 'Network error: ' + (e && e.message || e),
+      hint: aborted ? '' : 'The service may be down, or CORS blocked this origin (' + location.origin + '). Add it to CORS_ALLOWED_ORIGINS.'
+    };
+  } finally { clearTimeout(timer); }
+  entry.status = res.status; entry.ms = res.ms; entry.resBody = res.error ? res.error : res.data; entry.resHeaders = res.headers;
+  S.log.unshift(entry);
+  if (S.log.length > 300) S.log.pop();
+  emit('log', entry);
+  return res;
+}
+
+function errText(res) {
+  if (res.error) return res.error;
+  const d = res.data;
+  if (d && typeof d === 'object') return d.message || d.error || d.detail || JSON.stringify(d);
+  return typeof d === 'string' && d ? d : 'HTTP ' + res.status;
+}
+
+/* ====================== ui bits ====================== */
+function toast(msg, kind) {
+  const t = h('div', { class: 'toast ' + (kind || '') }, msg);
+  const box = $('#toasts'); box.appendChild(t);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => t.remove(), kind === 'bad' ? 6500 : 3200);
+}
+
+async function copy(text, label) {
+  try { await navigator.clipboard.writeText(text); toast((label || 'Copied') + ' to clipboard', 'ok'); }
+  catch (e) {
+    const ta = h('textarea', { style: { position: 'fixed', opacity: 0 } }); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast((label || 'Copied'), 'ok'); } catch (e2) { toast('Copy failed', 'bad'); }
+    ta.remove();
+  }
+}
+
+function modal(build) {
+  const wrap = h('div', { class: 'modal-wrap' });
+  const box = h('div', { class: 'modal' });
+  wrap.appendChild(box);
+  const close = () => wrap.remove();
+  wrap.addEventListener('mousedown', (e) => { if (e.target === wrap) close(); });
+  build(box, close);
+  document.body.appendChild(wrap);
+  return close;
+}
+
+function confirmBox(title, msg, danger, okLabel) {
+  return new Promise((resolve) => {
+    modal((box, close) => {
+      box.append(
+        h('h3', null, title), h('p', { class: 'muted' }, msg),
+        h('div', { class: 'row', style: { justifyContent: 'flex-end' } },
+          h('button', { class: 'btn', onclick: () => { close(); resolve(false); } }, 'Cancel'),
+          h('button', { class: 'btn ' + (danger ? 'danger fill' : 'primary'), onclick: () => { close(); resolve(true); } }, okLabel || 'Confirm'))
+      );
+    });
+  });
+}
+
+function promptBox(title, fields) {
+  return new Promise((resolve) => {
+    modal((box, close) => {
+      const inputs = {};
+      box.append(h('h3', null, title));
+      fields.forEach((f) => {
+        inputs[f.n] = f.type === 'select'
+          ? h('select', null, f.opts.map((o) => h('option', { value: o }, o)))
+          : h('input', { type: f.type || 'text', value: f.def === undefined ? '' : f.def, placeholder: f.ph || '' });
+        box.appendChild(h('label', { class: 'f', style: { margin: '10px 0' } }, h('span', null, f.label || f.n), inputs[f.n]));
+      });
+      box.appendChild(h('div', { class: 'row', style: { justifyContent: 'flex-end' } },
+        h('button', { class: 'btn', onclick: () => { close(); resolve(null); } }, 'Cancel'),
+        h('button', { class: 'btn primary', onclick: () => { const o = {}; fields.forEach((f) => { o[f.n] = inputs[f.n].value; }); close(); resolve(o); } }, 'OK')));
+      const first = box.querySelector('input,select'); if (first) first.focus();
+    });
+  });
+}
+
+function openDrawer(title, build) {
+  const scrim = h('div', { class: 'scrim' });
+  const body = h('div', { class: 'drawer-b' });
+  const titleEl = h('h3', { style: { flex: 1 } }, title);
+  const close = () => scrim.remove();
+  const drawer = h('div', { class: 'drawer' },
+    h('div', { class: 'drawer-h' }, titleEl, h('button', { class: 'btn sm', onclick: close }, 'Close')), body);
+  scrim.appendChild(drawer);
+  scrim.addEventListener('mousedown', (e) => { if (e.target === scrim) close(); });
+  document.body.appendChild(scrim);
+  build(body, close, titleEl);
+  return close;
+}
+
+async function withBusy(btn, fn) {
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+  try { return await fn(); } finally { if (btn) { btn.disabled = false; btn.classList.remove('busy'); } }
+}
+
+function field(label, input, hint) {
+  return h('label', { class: 'f' }, h('span', null, label, hint ? h('em', null, ' ' + hint) : null), input);
+}
+const sel = (opts, value, extra) => h('select', extra, opts.map((o) => {
+  const v = typeof o === 'object' ? o.v : o; const l = typeof o === 'object' ? o.l : o;
+  return h('option', { value: v, selected: String(v) === String(value) }, l === '' ? '(any)' : l);
+}));
+
+/* ====================== json viewer ====================== */
+function jsonView(val, depth) {
+  depth = depth || 0;
+  if (val === null) return h('span', { class: 'j-z' }, 'null');
+  if (typeof val === 'string') return h('span', { class: 'j-s' }, JSON.stringify(val));
+  if (typeof val === 'number') return h('span', { class: 'j-n' }, String(val));
+  if (typeof val === 'boolean') return h('span', { class: 'j-b' }, String(val));
+  const isArr = Array.isArray(val);
+  const keys = isArr ? val.map((_, i) => i) : Object.keys(val);
+  if (!keys.length) return h('span', { class: 'j-z' }, isArr ? '[]' : '{}');
+  const d = h('details', { class: 'jv', open: depth < 2 });
+  d.appendChild(h('summary', null, (isArr ? '[' : '{'), h('span', { class: 'j-z' }, ' ' + keys.length + (isArr ? ' items ' : ' keys ')), (isArr ? ']' : '}')));
+  const inn = h('div', { class: 'jv-in' });
+  keys.forEach((k) => {
+    inn.appendChild(h('div', null, isArr ? h('span', { class: 'j-z' }, k + ': ') : h('span', { class: 'j-k' }, JSON.stringify(k) + ': '), jsonView(val[k], depth + 1)));
+  });
+  d.appendChild(inn);
+  return d;
+}
+
+/* ====================== response shaping ====================== */
+function unwrap(d) {
+  if (d && typeof d === 'object' && !Array.isArray(d) && 'data' in d && ('success' in d || 'message' in d)) return d.data;
+  return d;
+}
+function asList(d) {
+  d = unwrap(d);
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.content)) return d.content;
+  return null;
+}
+function pageInfo(d) {
+  d = unwrap(d);
+  if (d && !Array.isArray(d) && Array.isArray(d.content) && ('totalElements' in d || 'totalPages' in d)) {
+    return { page: d.number !== undefined ? d.number : (d.pageable && d.pageable.pageNumber) || 0, pages: d.totalPages, total: d.totalElements, size: d.size };
+  }
+  return null;
+}
+const isListing = (o) => o && typeof o === 'object' && o.title !== undefined && (o.category !== undefined || o.price !== undefined || o.pricePerNight !== undefined || o.pricePerDay !== undefined);
+const isBooking = (o) => o && typeof o === 'object' && o.checkIn !== undefined && o.checkOut !== undefined;
+const isInterest = (o) => o && typeof o === 'object' && (o.listingTitle !== undefined || (o.listingId !== undefined && o.message !== undefined && (o.customer || o.owner)));
+const isUser = (o) => o && typeof o === 'object' && o.email !== undefined && (o.firstName !== undefined || o.username !== undefined || o.fullName !== undefined);
+
+const absUrl = (u) => !u ? '' : (/^(https?:|data:|blob:)/i.test(u) ? u : S.cfg.listing.replace(/\/+$/, '') + (u.startsWith('/') ? '' : '/') + u);
+const fileIdOf = (u) => { const m = /\/images\/([^/?#]+)/.exec(u || ''); return m ? decodeURIComponent(m[1]) : ''; };
+const idOf = (o) => o && (o.id || o._id || o.listingId || '');
+
+function fmtMoney(n, cur) {
+  if (n === undefined || n === null || n === '') return '-';
+  const v = Number(n);
+  if (Number.isNaN(v)) return String(n);
+  return (cur ? cur + ' ' : '') + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDate(s) {
+  if (!s) return '-';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return String(s);
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: String(s).length > 10 ? 'short' : undefined });
+}
+function convert(amount, from) {
+  if (!S.rates || S.currency === (from || 'USD')) return null;
+  const r = S.rates[S.currency]; const f = from && from !== 'USD' ? S.rates[from] : 1;
+  if (!r || !f) return null;
+  return Number(amount) / f * r;
+}
+
+const pretty = (s) => { const t = String(s || '').replace(/_/g, ' ').toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); };
+function statusChip(s) {
+  const m = { ACTIVE: 'ok', CONFIRMED: 'ok', COMPLETED: 'brand', PENDING: 'warn', REJECTED: 'bad', CANCELLED: 'bad', FAILED: 'bad', NEEDS_REVIEW: 'sun', HELD: 'info', RELEASED: 'ok', REFUNDED: 'info', NONE: '' };
+  return h('span', { class: 'chip ' + (m[s] || '') }, s ? pretty(s) : 'Unknown');
+}
+
+/* ====================== listing visuals ====================== */
+function listingImages(l) {
+  const urls = [];
+  if (l.mainImageUrl) urls.push(l.mainImageUrl);
+  (l.imageUrls || l.images || []).forEach((u) => { const s = typeof u === 'string' ? u : (u && (u.url || u.imageUrl)); if (s && !urls.includes(s)) urls.push(s); });
+  return urls;
+}
+function withSize(u, size) {
+  if (!u) return u;
+  const a = absUrl(u);
+  if (!/\/images\//.test(a)) return a;
+  return a.replace(/([?&])size=[^&]*/, '$1size=' + size) + (/[?&]size=/.test(a) ? '' : (a.includes('?') ? '&' : '?') + 'size=' + size);
+}
+function priceBits(l) {
+  const out = [];
+  if (l.pricePerNight) out.push([l.pricePerNight, 'night']);
+  if (l.pricePerDay) out.push([l.pricePerDay, 'day']);
+  if (!out.length && l.price !== undefined && l.price !== null) out.push([l.price, (l.priceUnit || '').replace('PER_', '').toLowerCase() || 'total']);
+  return out;
+}
+function priceView(l) {
+  const bits = priceBits(l);
+  if (!bits.length) return h('span', { class: 'muted' }, 'No price set');
+  return h('span', { class: 'price' }, bits.map(([v, u]) => {
+    const c = convert(v, l.currency);
+    return h('span', null, fmtMoney(v, l.currency || 'USD'), h('small', null, ' per ' + u), c ? h('small', null, ' (' + fmtMoney(c, S.currency) + ')') : null);
+  }));
+}
+const catArt = (cat) => icon(cat === 'LAND_SALE' ? 'land' : cat === 'LEASE' ? 'doc' : 'house', 40);
+function fileUseButton(l) {
+  return h('button', { class: 'btn sm', title: 'Set as the working listing', onclick: () => { setCtx('listing_id', idOf(l)); if (l.ownerId) setCtx('owner_id', l.ownerId); toast('Working listing set'); } }, 'Use id');
+}
+
+function listingCard(l, opts) {
+  opts = opts || {};
+  const id = idOf(l);
+  const imgs = listingImages(l);
+  const open = () => { setCtx('listing_id', id); if (l.ownerId) setCtx('owner_id', l.ownerId); openListing(id, l); };
+  const ph = h('div', { class: 'ph', onclick: open },
+    catArt(l.category), imgs.length ? h('img', { src: withSize(imgs[0], 'medium'), alt: l.title || '', loading: 'lazy', onerror: (e) => e.target.remove() }) : null,
+    h('div', { class: 'tags' }, l.category ? h('span', { class: 'chip' }, pretty(l.category)) : null, l.featured || l.promoted ? h('span', { class: 'chip sun' }, 'promoted') : null));
+  const meta = [l.city, l.country].filter(Boolean).join(', ');
+  const facts = [];
+  if (l.maxGuests) facts.push(l.maxGuests + ' guests');
+  if (l.bedrooms !== undefined && l.bedrooms !== null) facts.push(l.bedrooms + (l.bedrooms === 1 ? ' bedroom' : ' bedrooms'));
+  if (l.bathrooms !== undefined && l.bathrooms !== null) facts.push(l.bathrooms + (l.bathrooms === 1 ? ' bathroom' : ' bathrooms'));
+  const acts = h('div', { class: 'acts' }, h('button', { class: 'btn sm primary', onclick: open }, 'Open'), opts.actions ? opts.actions(l) : null);
+  return h('div', { class: 'lcard' }, ph,
+    h('div', { class: 'bd' },
+      h('div', { class: 'row gap-s' }, l.status ? statusChip(l.status) : null, l.archived ? h('span', { class: 'chip' }, 'archived') : null, l.deleted ? h('span', { class: 'chip bad' }, 'deleted') : null),
+      h('div', { class: 'ttl', onclick: open }, l.title || '(untitled)'),
+      h('div', { class: 'muted' }, meta || l.address || ''),
+      facts.length ? h('div', { class: 'facts' }, facts.map((f) => h('span', null, f))) : null,
+      priceView(l),
+      h('div', { class: 'idline', title: 'Click to copy', onclick: () => copy(id, 'Listing id') }, id),
+      acts));
+}
+
+function listingGrid(list, opts) {
+  if (!list.length) return h('div', { class: 'empty' }, 'No listings returned.');
+  return h('div', { class: 'grid auto' }, list.map((l) => listingCard(l, opts)));
+}
+
+/* ====================== auto renderer ====================== */
+function pagerBar(info, go) {
+  if (!info) return null;
+  return h('div', { class: 'row', style: { marginTop: '10px' } },
+    h('span', { class: 'muted tiny' }, 'Page ' + (info.page + 1) + ' of ' + (info.pages || 1) + ', ' + (info.total === undefined ? '?' : info.total) + ' total'),
+    h('button', { class: 'btn sm', disabled: info.page <= 0, onclick: () => go(info.page - 1) }, 'Prev'),
+    h('button', { class: 'btn sm', disabled: info.pages !== undefined && info.page + 1 >= info.pages, onclick: () => go(info.page + 1) }, 'Next'));
+}
+
+function smartView(res, hooks) {
+  hooks = hooks || {};
+  const d = unwrap(res.data);
+  const list = asList(res.data);
+  const wrap = h('div', { class: 'col' });
+  if (typeof d === 'string' && d) { wrap.appendChild(h('div', { class: 'notice ' + (res.ok ? 'ok' : 'bad') }, d)); return wrap; }
+  if (res.data && typeof res.data === 'object' && !Array.isArray(res.data) && res.data.message && (res.data.success !== undefined) && !res.data.data) {
+    wrap.appendChild(h('div', { class: 'notice ' + (res.ok ? 'ok' : 'bad') }, res.data.message));
+  }
+  if (list) {
+    if (list.length && list.every(isListing)) wrap.appendChild(listingGrid(list, { actions: hooks.listingActions }));
+    else if (list.length && list.every(isBooking)) wrap.appendChild(h('div', { class: 'grid auto-w' }, list.map((b) => bookingCard(b, hooks.bookingRole, hooks.refresh))));
+    else if (list.length && list.every(isInterest)) wrap.appendChild(interestList(list, hooks.refresh));
+    else if (list.length && list.every(isUser)) wrap.appendChild(userList(list));
+    else if (!list.length) wrap.appendChild(h('div', { class: 'empty' }, 'Empty list.'));
+    else wrap.appendChild(jsonView(list));
+    const pb = pagerBar(pageInfo(res.data), hooks.goPage || (() => {}));
+    if (pb) wrap.appendChild(pb);
+    return wrap;
+  }
+  if (isListing(d)) { wrap.appendChild(h('div', { style: { maxWidth: '340px' } }, listingCard(d, { actions: hooks.listingActions }))); return wrap; }
+  if (isBooking(d)) { wrap.appendChild(bookingCard(d, hooks.bookingRole, hooks.refresh)); return wrap; }
+  if (isUser(d)) { wrap.appendChild(userList([d])); return wrap; }
+  if (d !== undefined && d !== null && typeof d === 'object') wrap.appendChild(jsonView(d));
+  else if (d === null || d === undefined) wrap.appendChild(h('span', { class: 'muted' }, res.status ? 'Empty body.' : ''));
+  return wrap;
+}
+
+function resultBox(res, hooks) {
+  const stCls = res.status >= 500 || !res.status ? 's5' : res.status >= 400 ? 's4' : res.status >= 300 ? 's3' : 's2';
+  const body = h('div', { class: 'res-b' });
+  const modes = { smart: () => smartView(res, hooks), json: () => h('pre', { class: 'pre' }, typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2) || ''), headers: () => jsonView(res.headers || {}) };
+  let mode = 'smart';
+  const tabs = h('div', { class: 'pill-tabs' });
+  const draw = () => { clear(body).appendChild(modes[mode]()); $$('button', tabs).forEach((b) => b.classList.toggle('on', b.dataset.m === mode)); };
+  Object.keys(modes).forEach((m) => tabs.appendChild(h('button', { 'data-m': m, onclick: () => { mode = m; draw(); } }, m === 'smart' ? 'View' : m === 'json' ? 'JSON' : 'Headers')));
+  const box = h('div', { class: 'res' },
+    h('div', { class: 'res-h' },
+      h('span', { class: 'stat ' + stCls }, res.status || 'ERR'),
+      h('span', { class: 'muted tiny' }, res.ms + ' ms'),
+      h('span', { class: 'path grow' }, res.method + ' ' + res.url), tabs,
+      h('button', { class: 'btn sm', onclick: () => copy(typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2) || res.text, 'Response copied') }, 'Copy')),
+    res.error ? h('div', { class: 'notice bad', style: { margin: '10px' } }, res.error, res.hint ? h('div', { class: 'tiny' }, res.hint) : null) : null,
+    res.status === 401 ? h('div', { class: 'notice warn', style: { margin: '10px' } }, 'Unauthorized. Sign in from the persona menu (top right), or the token expired. Active persona: ' + (PERSONAS.find((p) => p.id === S.active) || {}).label) : null,
+    res.status === 403 ? h('div', { class: 'notice warn', style: { margin: '10px' } }, 'Forbidden. This persona may lack the required role.') : null,
+    body);
+  draw();
+  return box;
+}
+
+/* ====================== endpoint cards ====================== */
+const EP = {};                 /* key -> spec, filled by endpoints.js */
+const EP_BY_ID = {};
+
+function curlOf(method, url, headers, body) {
+  const parts = ["curl -X " + method + " '" + url + "'"];
+  Object.entries(headers || {}).forEach(([k, v]) => { if (k !== 'Accept') parts.push("  -H '" + k + ': ' + v + "'"); });
+  if (body && typeof body === 'string') parts.push("  -d '" + body.replace(/'/g, "'\\''") + "'");
+  return parts.join(' \\\n');
+}
+
+function readField(f, input) {
+  if (f.type === 'bool') return input.checked ? true : (f.sendFalse ? false : undefined);
+  if (f.type === 'files') return input.files && input.files.length ? [...input.files] : undefined;
+  let v = input.value;
+  if (v === '' || v === undefined) return undefined;
+  if (f.type === 'number') { const n = Number(v); return Number.isNaN(n) ? undefined : n; }
+  if (f.type === 'list') return v.split(',').map((x) => x.trim()).filter(Boolean);
+  if (f.type === 'json') { try { return JSON.parse(v); } catch (e) { return { badJson: v }; } }
+  if (f.type === 'datetime') return v.length === 16 ? v + ':00' : v;
+  return v;
+}
+
+function endpointCard(spec, o) {
+  o = o || {};
+  const inputs = {};
+  const fieldsEl = h('div', { class: 'grid fields' });
+  const resultHolder = h('div');
+  let rawArea = null;
+  let idemInput = null;
+  let reuse = null;
+
+  (spec.fields || []).forEach((f) => {
+    let inp;
+    const def = f.ctx ? S.ctx[f.ctx] : (f.def !== undefined ? f.def : '');
+    if (f.type === 'select') inp = sel(f.opts, def);
+    else if (f.type === 'bool') inp = h('input', { type: 'checkbox', checked: !!f.def });
+    else if (f.type === 'textarea' || f.type === 'json') inp = h('textarea', { placeholder: f.ph || '' }, def === undefined ? '' : (typeof def === 'object' ? JSON.stringify(def, null, 2) : def));
+    else if (f.type === 'files') inp = h('input', { type: 'file', multiple: f.multiple !== false, accept: 'image/*' });
+    else if (f.type === 'date') inp = h('input', { type: 'date', value: def });
+    else if (f.type === 'datetime') inp = h('input', { type: 'datetime-local', value: def ? String(def).slice(0, 16) : '' });
+    else inp = h('input', { type: f.type === 'number' ? 'number' : 'text', step: f.type === 'number' ? 'any' : undefined, value: def, placeholder: f.ph || '' });
+    inp.dataset.field = f.n;
+    if (f.ctx) {
+      inp.addEventListener('input', () => { inp.dataset.dirty = '1'; });
+      let seen = false;
+      const sync = (e) => {
+        if (inp.isConnected) seen = true; else if (seen) { bus.removeEventListener('ctx', sync); return; }
+        if (e.detail.key === f.ctx && !inp.dataset.dirty) inp.value = e.detail.val;
+      };
+      bus.addEventListener('ctx', sync);
+    }
+    inputs[f.n] = inp;
+    const label = (f.label || f.n) + (f.req ? ' *' : '');
+    const wrapEl = f.type === 'bool'
+      ? h('label', { class: 'chk' }, inp, label)
+      : field(label, inp, f.hint ? '(' + f.hint + ')' : '');
+    if (f.wide || f.type === 'textarea' || f.type === 'json') wrapEl.style.gridColumn = '1 / -1';
+    fieldsEl.appendChild(wrapEl);
+  });
+
+  if (spec.idem) {
+    idemInput = h('input', { type: 'text', value: uid() });
+    reuse = h('input', { type: 'checkbox' });
+    const gen = h('button', { class: 'btn sm', type: 'button', onclick: () => { idemInput.value = uid(); } }, 'New key');
+    const box = h('div', { style: { gridColumn: '1 / -1' } },
+      field('Idempotency-Key header', h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, idemInput, gen)),
+      h('label', { class: 'chk tiny', style: { marginTop: '6px' } }, reuse, 'Keep this key for the next send (tests that a repeat returns the same result)'));
+    fieldsEl.appendChild(box);
+  }
+
+  const collect = () => {
+    const path = spec.path.replace(/\{(\w+)\}/g, (m, n) => {
+      const f = (spec.fields || []).find((x) => x.n === n);
+      return encodeURIComponent(f ? (inputs[n].value || '') : (S.ctx[n] || ''));
+    });
+    const query = {}; const body = {}; const files = []; const headers = {};
+    (spec.fields || []).forEach((f) => {
+      const v = readField(f, inputs[f.n]);
+      if (v === undefined) return;
+      if (f.in === 'query') query[f.n] = v;
+      else if (f.in === 'body') body[f.n] = v;
+      else if (f.in === 'file') files.push(...v);
+      else if (f.in === 'header') headers[f.n] = v;
+    });
+    if (spec.fixedQuery) Object.assign(query, spec.fixedQuery);
+    return { path, query, body, files, headers };
+  };
+
+  const send = async (btn) => {
+    const c = collect();
+    const bad = (spec.fields || []).filter((f) => f.req && f.in === 'path' && !inputs[f.n].value);
+    if (bad.length) { toast('Missing: ' + bad.map((f) => f.n).join(', '), 'bad'); return; }
+    const opts = { method: spec.method, query: c.query, headers: Object.assign({}, c.headers) };
+    if (spec.auth === 'none') opts.anon = true;
+    if (spec.auth === 'apikey') { opts.anon = true; opts.apiKey = S.cfg.apiKey; if (!S.cfg.apiKey) toast('No internal API key set (Settings). Sending without it.', 'bad'); }
+    if (spec.auth === 'bearer+key') opts.apiKey = S.cfg.apiKey;
+    if (spec.idem) opts.headers['Idempotency-Key'] = idemInput.value;
+    if (spec.body === 'json') {
+      const raw = rawArea && rawArea.value.trim();
+      if (raw) opts.raw = raw; else if (Object.keys(c.body).length || spec.sendEmptyBody) opts.json = c.body;
+      if (spec.bodyFrom) opts.json = spec.bodyFrom(c.body);
+    } else if (spec.body === 'multipart') {
+      const fd = new FormData();
+      const raw = rawArea && rawArea.value.trim();
+      const reqJson = raw || (spec.rawField ? inputs[spec.rawField].value : JSON.stringify(c.body));
+      if (spec.reqPart) fd.append('request', new Blob([reqJson], { type: 'application/json' }));
+      c.files.forEach((f) => fd.append('files', f, f.name));
+      opts.form = fd;
+    }
+    const res = await withBusy(btn, () => api(spec.svc, c.path, opts));
+    if (spec.idem && res.status && !reuse.checked) idemInput.value = uid();
+    const extra = { refresh: () => send(btn) };
+    if (inputs.page) extra.goPage = (p) => { inputs.page.value = p; send(btn); };
+    clear(resultHolder).appendChild(resultBox(res, Object.assign(extra, spec.hooks || {})));
+    if (res.ok) {
+      const d = unwrap(res.data);
+      if (spec.capture) spec.capture(d, res);
+      if (spec.after) spec.after(res);
+    }
+    if (o.onResult) o.onResult(res);
+    return res;
+  };
+
+  const sendBtn = h('button', { class: 'btn primary', onclick: (e) => send(e.currentTarget) }, 'Send');
+  const hasBody = spec.body === 'json' || spec.body === 'multipart';
+  const actions = h('div', { class: 'row', style: { marginTop: '12px' } }, sendBtn,
+    hasBody ? h('button', { class: 'btn sm', type: 'button', onclick: () => {
+      if (rawArea) { rawArea.remove(); rawArea = null; return; }
+      const c = collect();
+      rawArea = h('textarea', { style: { gridColumn: '1 / -1', minHeight: '120px' } }, JSON.stringify(spec.bodyFrom ? spec.bodyFrom(c.body) : c.body, null, 2));
+      fieldsEl.appendChild(rawArea);
+    } }, 'Edit raw JSON') : null,
+    h('button', { class: 'btn sm', type: 'button', onclick: () => {
+      const c = collect();
+      const headers = Object.assign({ Authorization: 'Bearer ' + me().token }, c.headers);
+      if (spec.idem) headers['Idempotency-Key'] = idemInput.value;
+      copy(curlOf(spec.method, buildUrl(spec.svc, c.path, c.query), headers, hasBody ? JSON.stringify(c.body) : ''), 'cURL');
+    } }, 'Copy cURL'));
+
+  const card = h('div', { class: 'ep' + (o.open ? ' open' : ''), 'data-ep': spec.method + ' ' + spec.path },
+    h('div', { class: 'ep-h', onclick: (e) => { if (e.target.closest('button')) return; card.classList.toggle('open'); } },
+      h('span', { class: 'method m-' + spec.method }, spec.method),
+      h('b', null, spec.title),
+      h('span', { class: 'path' }, spec.path),
+      spec.roles ? h('span', { class: 'chip warn' }, spec.roles) : null,
+      icon('chevron', 14, 'car')),
+    h('div', { class: 'ep-b' },
+      spec.desc ? h('div', { class: 'desc' }, spec.desc) : null,
+      fieldsEl, actions, resultHolder));
+  card.send = () => send(sendBtn);
+  return card;
+}
+
+function epCards(keys, o) {
+  return keys.map((k) => {
+    const spec = EP[k];
+    if (!spec) return h('div', { class: 'notice bad' }, 'Missing endpoint spec: ' + k);
+    return endpointCard(spec, o);
+  });
+}
+
+/* ====================== endpoint registry ====================== */
+(function () {
+  const pad = (n) => String(n).padStart(2, '0');
+  const dt = (days, hh) => { const d = new Date(Date.now() + days * 864e5); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + hh + ':00'; };
+  const dd = (days) => dt(days, '00').slice(0, 10);
+
+  const P = (n, ctx, extra) => Object.assign({ n, in: 'path', ctx, req: true }, extra);
+  const Q = (n, extra) => Object.assign({ n, in: 'query' }, extra);
+  const B = (n, extra) => Object.assign({ n, in: 'body' }, extra);
+  const PAGING = [Q('page', { type: 'number', def: 0 }), Q('size', { type: 'number', def: 20 }), Q('sort', { def: 'createdAt,desc' })];
+  const CATS = ['', 'SHORT_TERM_RENTAL', 'LONG_TERM_RENTAL', 'LEASE', 'HOUSE_SALE', 'LAND_SALE'];
+  const BSTAT = ['', 'PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'FAILED', 'NEEDS_REVIEW'];
+  const listingSample = {
+    title: 'Cozy Studio in Kilimani', description: 'Bright, modern studio near Yaya Centre.', category: 'SHORT_TERM_RENTAL',
+    pricePerDay: 40, pricePerNight: 55, latitude: -1.2921, longitude: 36.7833, address: 'Argwings Kodhek Road', city: 'Nairobi', country: 'Kenya',
+    maxGuests: 2, cancellationPolicy: 'MODERATE', bedrooms: 1, bathrooms: 1, hasWifi: true, hasKitchen: true, amenities: ['Parking', 'Backup Generator']
+  };
+
+  const add = (spec) => { spec.key = spec.method + ' ' + spec.path; EP[spec.key] = spec; return spec; };
+  const listing = (m, path, title, fields, extra) => add(Object.assign({ svc: 'listing', method: m, path, title, fields: fields || [], auth: 'bearer', body: 'none' }, extra));
+
+  /* ---------- listings crud ---------- */
+  listing('POST', '/listings', 'Create listing', [
+    { n: 'request', in: 'none', type: 'json', def: listingSample, wide: true, label: 'request (JSON part)' },
+    { n: 'files', in: 'file', type: 'files', label: 'files (images)', wide: true }
+  ], { body: 'multipart', reqPart: true, rawField: 'request', desc: 'Multipart: a JSON part named request plus optional image files. Returns the new listing.', capture: (d) => { if (d && d.id) { setCtx('listing_id', d.id); if (d.ownerId) setCtx('owner_id', d.ownerId); } } });
+  listing('PUT', '/listings/{listing_id}', 'Update listing', [
+    P('listing_id', 'listing_id'),
+    { n: 'request', in: 'none', type: 'json', def: Object.assign({}, listingSample, { title: 'Updated Luxury Apartment' }), wide: true, label: 'request (JSON part)' },
+    { n: 'files', in: 'file', type: 'files', label: 'files (added to existing)', wide: true }
+  ], { body: 'multipart', reqPart: true, rawField: 'request', desc: 'Images already on the listing are kept when the request does not mention imageUrls.' });
+  listing('POST', '/listings/{listing_id}/archive', 'Archive listing', [P('listing_id', 'listing_id')], { desc: 'Hides the listing from public search. Owner only.' });
+  listing('POST', '/listings/{listing_id}/unarchive', 'Unarchive listing', [P('listing_id', 'listing_id')]);
+  listing('DELETE', '/listings/{listing_id}', 'Delete listing', [P('listing_id', 'listing_id')], { desc: 'Owner delete (soft delete).' });
+  listing('POST', '/listings/upload-images', 'Upload images', [{ n: 'files', in: 'file', type: 'files', label: 'files', wide: true }], { body: 'multipart', desc: 'Stores images and returns their URLs, to be placed in a later request.' });
+  listing('GET', '/listings/{listing_id}', 'Get listing by id', [P('listing_id', 'listing_id')], { auth: 'none', capture: (d) => { if (d && d.ownerId) setCtx('owner_id', d.ownerId); } });
+  listing('GET', '/listings/short-term', 'Short term rentals', [Q('city', { def: 'Nairobi' })], { auth: 'none' });
+  listing('GET', '/listings/me', 'My listings', [Q('status', { type: 'select', opts: ['', 'PENDING', 'ACTIVE', 'REJECTED'] }), Q('category', { type: 'select', opts: CATS }), Q('city'), Q('minPrice', { type: 'number' }), Q('maxPrice', { type: 'number' }), Q('query')]);
+  listing('GET', '/listings/owner/{owner_id}', 'Listings by owner', [P('owner_id', 'owner_id'), Q('category', { type: 'select', opts: CATS })], { auth: 'none' });
+  listing('GET', '/listings/search', 'Search listings', [Q('query'), Q('category', { type: 'select', opts: CATS }), Q('minPrice', { type: 'number' }), Q('maxPrice', { type: 'number' }), Q('city')], { auth: 'none' });
+
+  /* ---------- images ---------- */
+  listing('POST', '/listings/{listing_id}/images', 'Add images to a listing', [P('listing_id', 'listing_id'), { n: 'files', in: 'file', type: 'files', label: 'files', wide: true }], { body: 'multipart' });
+  listing('DELETE', '/listings/{listing_id}/images/{file_id}', 'Remove an image', [P('listing_id', 'listing_id'), P('file_id', 'file_id')]);
+  listing('PUT', '/listings/{listing_id}/images/cover', 'Set the cover image', [P('listing_id', 'listing_id'), B('fileId', { ctx: 'file_id', req: true })], { body: 'json' });
+  listing('PUT', '/listings/{listing_id}/images/order', 'Reorder images', [P('listing_id', 'listing_id'), B('fileIds', { type: 'list', hint: 'comma separated, in the order you want', wide: true })], { body: 'json' });
+  listing('GET', '/images/{file_id}', 'Get an image', [P('file_id', 'file_id'), Q('size', { type: 'select', opts: ['medium', 'thumb', 'original'] })], { auth: 'none', desc: 'Public. The browser fetches it as text here; use the gallery on a listing to see pictures.' });
+
+  /* ---------- availability ---------- */
+  listing('GET', '/listings/{listing_id}/availability', 'Get availability', [P('listing_id', 'listing_id'), Q('from', { type: 'date', def: dd(1) }), Q('to', { type: 'date', def: dd(31) })], { auth: 'none', desc: 'Short term rentals only. The range is capped and to must be after from.' });
+  listing('POST', '/listings/{listing_id}/blocked-dates', 'Block dates', [P('listing_id', 'listing_id'), B('from', { type: 'date', def: dd(40), req: true }), B('to', { type: 'date', def: dd(43), req: true })], { body: 'json', desc: 'Owner only. The "to" night stays open, like a check-out day.', capture: (d) => { if (d && d.blockId) setCtx('block_id', d.blockId); } });
+  listing('DELETE', '/listings/{listing_id}/blocked-dates/{block_id}', 'Unblock dates', [P('listing_id', 'listing_id'), P('block_id', 'block_id')]);
+
+  /* ---------- admin listings ---------- */
+  const ADM = 'Admin or Finance';
+  listing('GET', '/admin/listings', 'List all listings', [Q('status', { type: 'select', opts: ['', 'PENDING', 'ACTIVE', 'REJECTED'] }), Q('deleted', { type: 'select', opts: ['', 'true', 'false'] }), Q('archived', { type: 'select', opts: ['', 'true', 'false'] })].concat(PAGING), { roles: ADM });
+  listing('GET', '/admin/listings/{listing_id}', 'Get single listing', [P('listing_id', 'listing_id')], { roles: ADM });
+  ['approve', 'reject', 'archive', 'unarchive', 'restore'].forEach((a) => listing('PUT', '/admin/listings/{listing_id}/' + a, a.charAt(0).toUpperCase() + a.slice(1) + ' listing', [P('listing_id', 'listing_id')], { roles: ADM }));
+  listing('DELETE', '/admin/listings/{listing_id}', 'Soft delete listing', [P('listing_id', 'listing_id')], { roles: ADM });
+  listing('DELETE', '/admin/listings/{listing_id}/hard-delete', 'Permanent delete listing', [P('listing_id', 'listing_id')], { roles: ADM, desc: 'Removes the listing and its images for good.' });
+
+  /* ---------- locations ---------- */
+  listing('GET', '/locations/nearby', 'Nearby listings', [Q('latitude', { type: 'number', def: -1.2921 }), Q('longitude', { type: 'number', def: 36.8219 }), Q('radiusKm', { type: 'number', def: 10 })], { auth: 'none' });
+  listing('GET', '/locations/city', 'Search by city', [Q('city', { def: 'Nairobi' })], { auth: 'none' });
+  listing('GET', '/locations/bounds', 'Listings in map bounds', [Q('minLat', { type: 'number', def: -1.3 }), Q('maxLat', { type: 'number', def: -1.2 }), Q('minLng', { type: 'number', def: 36.7 }), Q('maxLng', { type: 'number', def: 36.9 })], { auth: 'none' });
+
+  /* ---------- social ---------- */
+  listing('GET', '/social/profile/me', 'My profile');
+  listing('GET', '/social/profile/user/{user_id}', 'User profile', [P('user_id', 'user_id')]);
+  listing('GET', '/social/profile/search', 'Search users', [Q('query', { def: 'graham', req: false })]);
+  listing('GET', '/social/profile/all', 'All users');
+  listing('POST', '/social/views/{user_id}', 'Record profile view', [P('user_id', 'user_id')]);
+  listing('GET', '/social/views/who-viewed-me', 'Who viewed me');
+  listing('GET', '/social/views/who-i-viewed', 'Who I viewed');
+  listing('GET', '/social/views/stats', 'My profile view stats');
+  listing('GET', '/social/views/stats/{user_id}', 'Profile view stats of a user', [P('user_id', 'user_id')]);
+  listing('POST', '/social/follow', 'Follow user', [B('targetId', { ctx: 'user_id', req: true })], { body: 'json' });
+  listing('DELETE', '/social/unfollow/{user_id}', 'Unfollow user', [P('user_id', 'user_id')]);
+  listing('POST', '/social/like', 'Like user', [B('targetId', { ctx: 'user_id', req: true })], { body: 'json' });
+  listing('DELETE', '/social/unlike/{user_id}', 'Unlike user', [P('user_id', 'user_id')]);
+  listing('POST', '/social/review', 'Create review', [B('targetId', { ctx: 'user_id', req: true }), B('rating', { type: 'number', def: 5 }), B('comment', { type: 'textarea', def: 'Excellent service and very professional!', wide: true })], { body: 'json', capture: (d) => { if (d && (d.id || d.reviewId)) setCtx('review_id', d.id || d.reviewId); } });
+  listing('PUT', '/social/review', 'Edit review', [B('reviewId', { ctx: 'review_id', req: true }), B('rating', { type: 'number', def: 4 }), B('comment', { type: 'textarea', def: 'Updated: still great.', wide: true })], { body: 'json' });
+  listing('DELETE', '/social/review/{review_id}', 'Delete review', [P('review_id', 'review_id')]);
+  listing('GET', '/social/reviews/{user_id}', 'Reviews of a user', [P('user_id', 'user_id')]);
+  listing('GET', '/social/stats/{user_id}', 'Social stats of a user', [P('user_id', 'user_id')]);
+  listing('GET', '/social/my-likes', 'My likes');
+  listing('GET', '/social/my-following', 'My following');
+
+  /* ---------- promotion ---------- */
+  listing('POST', '/listings/promote', 'Promote a listing', [B('listingId', { ctx: 'listing_id', req: true }), B('days', { type: 'number', def: 10 })], { body: 'json', idem: true, desc: 'Charges the owner wallet. Send the Idempotency-Key twice to see a repeat answered without a second charge.' });
+  listing('POST', '/listings/{listing_id}/extend', 'Extend promotion', [P('listing_id', 'listing_id'), Q('days', { type: 'number', def: 5 })], { idem: true });
+  listing('GET', '/listings/promotions/my', 'My promotions', PAGING);
+
+  /* ---------- currency ---------- */
+  listing('GET', '/currency/rates', 'All rates', [], { auth: 'none' });
+  listing('GET', '/currency/rate', 'Single rate', [Q('to', { def: 'KES' })], { auth: 'none' });
+  listing('GET', '/currency/convert', 'Convert amount', [Q('amount', { type: 'number', def: 100 }), Q('to', { def: 'KES' })], { auth: 'none' });
+  listing('GET', '/currency/supported', 'Supported currencies', [], { auth: 'none' });
+
+  /* ---------- bookings ---------- */
+  listing('POST', '/bookings', 'Create booking', [
+    B('listingId', { ctx: 'listing_id', req: true }),
+    B('checkIn', { type: 'datetime', def: dt(30, '14:00') }),
+    B('checkOut', { type: 'datetime', def: dt(33, '11:00') }),
+    B('priceUnit', { type: 'select', opts: ['PER_NIGHT', 'PER_DAY', 'PER_MONTH', 'TOTAL'] })
+  ], { body: 'json', idem: true, desc: 'Charges the tenant wallet (price plus the wallet fee). With escrow on, the money is held until after check-in.', capture: (d) => { if (d && d.id) { setCtx('booking_id', d.id); setCtx('escrow_hold_reference', 'booking-' + d.id); } } });
+  listing('POST', '/bookings/{booking_id}/cancel', 'Cancel booking', [P('booking_id', 'booking_id'), Q('reason', { def: 'Change of plans', wide: true })]);
+  listing('GET', '/bookings/{booking_id}/cancellation-quote', 'Cancellation quote', [P('booking_id', 'booking_id')], { desc: 'What a cancel would refund right now, without cancelling.' });
+  listing('GET', '/bookings/me', 'My bookings (tenant)', [Q('status', { type: 'select', opts: BSTAT })].concat(PAGING), { hooks: { bookingRole: 'tenant' } });
+  listing('GET', '/bookings/received', 'Received bookings (owner)', [Q('status', { type: 'select', opts: BSTAT })].concat(PAGING), { hooks: { bookingRole: 'owner' } });
+  listing('GET', '/admin/bookings/needs-review', 'Bookings needing review', PAGING, { roles: ADM, hooks: { bookingRole: 'admin' } });
+  listing('POST', '/admin/bookings/{booking_id}/retry-payout', 'Retry a failed payout', [P('booking_id', 'booking_id')], { roles: ADM });
+  listing('POST', '/admin/bookings/{booking_id}/resolve-payment', 'Resolve an unconfirmed payment', [P('booking_id', 'booking_id'), Q('paid', { type: 'select', opts: ['true', 'false'], req: true })], { roles: ADM });
+
+  /* ---------- interests ---------- */
+  listing('POST', '/interests', 'Express interest', [B('listingId', { ctx: 'listing_id', req: true }), B('message', { type: 'textarea', def: 'Looking to move in next month, is it still available?', wide: true })], { body: 'json', capture: (d) => { if (d && d.id) setCtx('interest_id', d.id); } });
+  listing('DELETE', '/interests/{interest_id}', 'Cancel interest', [P('interest_id', 'interest_id')]);
+  listing('GET', '/interests/me', 'My interests', PAGING.slice(0, 2));
+  listing('GET', '/interests/received', 'Received interests (leads)', PAGING.slice(0, 2));
+
+  /* ---------- health ---------- */
+  listing('GET', '/system/health', 'Health check', [], { auth: 'none' });
+  listing('GET', '/system/health/details', 'Health details', []);
+  listing('GET', '/system/test-token', 'Test token', [], { desc: 'Echoes what the service understood from your bearer token.' });
+
+  /* ---------- wallet helpers (other service) ---------- */
+  const W = (m, path, title, fields, extra) => add(Object.assign({ svc: 'wallet', method: m, path, title, fields: fields || [], auth: 'bearer', body: 'none' }, extra));
+  W('GET', '/wallet/balance', 'Wallet balance');
+  W('POST', '/wallet/create', 'Create wallet');
+  W('POST', '/wallet/statement', 'Wallet statement', [B('fromDate', { type: 'date', def: dd(-30) }), B('toDate', { type: 'date', def: dd(0) }), B('type', { ph: 'optional' })], { body: 'json' });
+  W('POST', '/internal/escrow/hold', 'Escrow: hold a payment', [
+    B('senderUserId', { ctx: 'user_id', req: true }), B('beneficiaryEmail', { req: true }), B('amount', { type: 'number', def: 100 }),
+    B('description', { def: 'Booking escrow test' }), B('reference', { def: 'escrow-' + Date.now() }), B('initiatedBy', { def: 'LISTING_SERVICE' })
+  ], { body: 'json', auth: 'apikey', desc: 'Uses the internal API key from Settings.' });
+  W('POST', '/internal/escrow/{escrow_hold_reference}/payouts', 'Escrow: pay out of a hold', [
+    P('escrow_hold_reference', 'escrow_hold_reference'), B('recipientAccountNumber', { req: true, hint: 'sender or beneficiary email' }), B('amount', { type: 'number', def: 100 }),
+    B('description', { def: 'Payout for booking escrow test' }), B('reference', { def: 'escrow-payout-' + Date.now() }), B('initiatedBy', { def: 'LISTING_SERVICE' })
+  ], { body: 'json', auth: 'apikey' });
+  W('GET', '/internal/escrow/{escrow_hold_reference}', 'Escrow: get a hold and its payouts', [P('escrow_hold_reference', 'escrow_hold_reference')], { auth: 'apikey', hooks: {} });
+})();
+
+/* ====================== calendar ====================== */
+const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/* A month grid fed by GET /listings/{id}/availability. Click a day, then another, to pick a range. */
+function availabilityCalendar(listingId, opts) {
+  opts = opts || {};
+  let cur = new Date(); cur.setDate(1);
+  let off = new Set();
+  let start = null; let end = null;
+  const box = h('div', { class: 'cal' });
+  const note = h('div', { class: 'muted tiny', style: { marginTop: '6px' } });
+
+  async function load() {
+    const first = new Date(cur.getFullYear(), cur.getMonth(), 1);
+    const last = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    const res = await api('listing', '/listings/' + encodeURIComponent(listingId) + '/availability', { query: { from: ymd(first), to: ymd(last) }, anon: true });
+    off = new Set();
+    if (res.ok) {
+      const d = unwrap(res.data) || {};
+      (d.unavailableDates || []).forEach((x) => off.add(String(x).slice(0, 10)));
+      note.textContent = off.size + ' unavailable date(s) this month.';
+    } else note.textContent = 'Availability: ' + errText(res);
+    draw();
+  }
+
+  function pick(day) {
+    if (!start || (start && end)) { start = day; end = null; }
+    else if (day > start) { end = day; }
+    else { start = day; end = null; }
+    if (opts.onRange) opts.onRange(start, end);
+    draw();
+  }
+
+  function draw() {
+    clear(box);
+    const y = cur.getFullYear(); const m = cur.getMonth();
+    box.appendChild(h('div', { class: 'cal-h' },
+      h('button', { class: 'btn sm', onclick: () => { cur = new Date(y, m - 1, 1); load(); } }, 'Prev'),
+      h('span', null, MONTHS[m] + ' ' + y),
+      h('button', { class: 'btn sm', onclick: () => { cur = new Date(y, m + 1, 1); load(); } }, 'Next')));
+    const g = h('div', { class: 'cal-g' });
+    ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach((d) => g.appendChild(h('div', { class: 'cal-d dow' }, d)));
+    const lead = (new Date(y, m, 1).getDay() + 6) % 7;
+    for (let i = 0; i < lead; i++) g.appendChild(h('div', { class: 'cal-d blank' }));
+    const days = new Date(y, m + 1, 0).getDate();
+    const today = ymd(new Date());
+    for (let d = 1; d <= days; d++) {
+      const s = ymd(new Date(y, m, d));
+      const isOff = off.has(s);
+      let cls = 'cal-d';
+      if (isOff) cls += ' off';
+      if (s < today) cls += ' past';
+      if (s === start || s === end) cls += ' sel';
+      else if (start && end && s > start && s < end) cls += ' rng';
+      g.appendChild(h('div', { class: cls, 'data-day': s, onclick: isOff ? null : () => pick(s) }, d));
+    }
+    box.appendChild(g);
+    box.appendChild(note);
+    box.appendChild(h('div', { class: 'tiny muted' }, start ? ('Selected: ' + start + (end ? ' to ' + end : ' (pick an end date)')) : 'Pick a start date, then an end date.'));
+  }
+  box.reload = load;
+  box.selection = () => ({ start, end });
+  box.reset = () => { start = null; end = null; draw(); };
+  draw(); load();
+  return box;
+}
+
+/* ====================== bookings ====================== */
+function bookingCard(b, role, refresh) {
+  const id = idOf(b);
+  const out = h('div');
+  const row = (k, v) => v === undefined || v === null || v === '' ? null : [h('dt', null, k), h('dd', null, v)];
+  const cur = b.currency || 'USD';
+  const kv = h('dl', { class: 'kv' },
+    row('Listing', b.listingId ? h('span', { class: 'idline', onclick: () => { setCtx('listing_id', b.listingId); openListing(b.listingId); } }, b.listingId) : null),
+    row('Check in', fmtDate(b.checkIn)), row('Check out', fmtDate(b.checkOut)),
+    row('Rate', b.rate !== undefined && b.rate !== null ? fmtMoney(b.rate, cur) + (b.units ? ' x ' + b.units + ' ' + String(b.priceUnit || '').replace('PER_', '').toLowerCase() + '(s)' : '') : null),
+    row('Total', b.totalAmount !== undefined ? fmtMoney(b.totalAmount, cur) : null),
+    row('Debited (escrow)', b.fundingAmount !== undefined && b.fundingAmount !== null ? fmtMoney(b.fundingAmount, cur) : null),
+    row('Policy', b.cancellationPolicy ? pretty(b.cancellationPolicy) : null),
+    row('Refund', b.refundAmount !== undefined && b.refundAmount !== null ? fmtMoney(b.refundAmount, cur) + (b.refundPercent !== undefined && b.refundPercent !== null ? ' (' + b.refundPercent + '%)' : '') : null),
+    row('Owner payout', b.ownerPayoutAmount !== undefined && b.ownerPayoutAmount !== null ? fmtMoney(b.ownerPayoutAmount, cur) : null),
+    row('Tenant', b.tenant && (b.tenant.email || b.tenant.firstName || b.tenant.id) ? (b.tenant.email || b.tenant.firstName || b.tenant.id) : null),
+    row('Owner', b.owner && (b.owner.email || b.owner.firstName || b.owner.id) ? (b.owner.email || b.owner.firstName || b.owner.id) : null));
+  const btns = h('div', { class: 'row gap-s', style: { marginTop: '10px' } },
+    h('button', { class: 'btn sm', onclick: () => { setCtx('booking_id', id); setCtx('escrow_hold_reference', 'booking-' + id); toast('Working booking set'); } }, 'Use id'),
+    h('button', { class: 'btn sm', onclick: async (e) => {
+      const res = await withBusy(e.currentTarget, () => api('listing', '/bookings/' + encodeURIComponent(id) + '/cancellation-quote'));
+      clear(out).appendChild(quoteView(res));
+    } }, 'Quote'),
+    h('button', { class: 'btn sm danger', onclick: async (e) => {
+      const r = await promptBox('Cancel booking', [{ n: 'reason', label: 'Reason', def: 'Change of plans' }]);
+      if (!r) return;
+      const res = await withBusy(e.currentTarget, () => api('listing', '/bookings/' + encodeURIComponent(id) + '/cancel', { method: 'POST', query: { reason: r.reason } }));
+      clear(out).appendChild(resultBox(res, {}));
+      toast(res.ok ? 'Cancel request sent' : errText(res), res.ok ? 'ok' : 'bad');
+      if (res.ok && refresh) refresh();
+    } }, 'Cancel'),
+    h('button', { class: 'btn sm', onclick: () => openEscrowTracker('booking-' + id) }, 'Escrow'),
+    role === 'admin' ? [
+      h('button', { class: 'btn sm sun', onclick: async (e) => {
+        const res = await withBusy(e.currentTarget, () => api('listing', '/admin/bookings/' + encodeURIComponent(id) + '/retry-payout', { method: 'POST' }));
+        clear(out).appendChild(resultBox(res, {})); if (res.ok && refresh) refresh();
+      } }, 'Retry payout'),
+      h('button', { class: 'btn sm', onclick: async (e) => {
+        const res = await withBusy(e.currentTarget, () => api('listing', '/admin/bookings/' + encodeURIComponent(id) + '/resolve-payment', { method: 'POST', query: { paid: 'true' } }));
+        clear(out).appendChild(resultBox(res, {})); if (res.ok && refresh) refresh();
+      } }, 'Mark paid'),
+      h('button', { class: 'btn sm', onclick: async (e) => {
+        const res = await withBusy(e.currentTarget, () => api('listing', '/admin/bookings/' + encodeURIComponent(id) + '/resolve-payment', { method: 'POST', query: { paid: 'false' } }));
+        clear(out).appendChild(resultBox(res, {})); if (res.ok && refresh) refresh();
+      } }, 'Mark unpaid')
+    ] : null);
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, 'Booking'), statusChip(b.status), b.escrowStatus && b.escrowStatus !== 'NONE' ? h('span', { class: 'chip info' }, 'Escrow ' + pretty(b.escrowStatus).toLowerCase()) : null,
+      b.success === false ? h('span', { class: 'chip bad' }, 'not successful') : null),
+    b.message ? h('div', { class: 'notice ' + (b.success === false ? 'bad' : ''), style: { marginBottom: '10px' } }, b.message) : null,
+    kv, h('div', { class: 'idline', style: { marginTop: '8px' }, onclick: () => copy(id, 'Booking id') }, id), btns, out);
+}
+
+function quoteView(res) {
+  if (!res.ok) return resultBox(res, {});
+  const q = unwrap(res.data) || {};
+  const cur = q.currency || 'USD';
+  return h('div', { class: 'res' }, h('div', { class: 'res-b' },
+    h('div', { class: 'row' }, h('b', null, 'Cancellation quote'), h('span', { class: 'chip brand' }, q.policy || ''), q.cancelledByOwner ? h('span', { class: 'chip sun' }, 'owner cancels') : null),
+    h('dl', { class: 'kv', style: { marginTop: '8px' } },
+      h('dt', null, 'Hours until check in'), h('dd', null, q.hoursUntilCheckIn),
+      h('dt', null, 'Refund'), h('dd', null, fmtMoney(q.refundAmount, cur) + ' (' + q.refundPercent + '%)'),
+      h('dt', null, 'Owner keeps'), h('dd', null, fmtMoney(q.ownerAmount, cur))),
+    q.message ? h('div', { class: 'notice', style: { marginTop: '8px' } }, q.message) : null));
+}
+
+/* ====================== interests and users ====================== */
+function interestList(list, refresh) {
+  return h('div', { class: 'grid auto-w' }, list.map((i) => h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, i.listingTitle || 'Interest'), h('span', { class: 'muted tiny' }, fmtDate(i.createdAt))),
+    h('p', { style: { margin: '0 0 8px' } }, i.message || ''),
+    h('dl', { class: 'kv' },
+      i.customer ? [h('dt', null, 'From'), h('dd', null, i.customer.email || i.customer.firstName || i.customer.id || '')] : null,
+      i.owner ? [h('dt', null, 'Owner'), h('dd', null, i.owner.email || i.owner.firstName || i.owner.id || '')] : null),
+    h('div', { class: 'row gap-s', style: { marginTop: '10px' } },
+      i.listingId ? h('button', { class: 'btn sm primary', onclick: () => { setCtx('listing_id', i.listingId); openListing(i.listingId); } }, 'Open listing') : null,
+      h('button', { class: 'btn sm', onclick: () => { setCtx('interest_id', idOf(i)); toast('Working interest set'); } }, 'Use id'),
+      h('button', { class: 'btn sm danger', onclick: async (e) => {
+        if (!await confirmBox('Cancel interest', 'Remove this interest?', true, 'Cancel interest')) return;
+        const res = await withBusy(e.currentTarget, () => api('listing', '/interests/' + encodeURIComponent(idOf(i)), { method: 'DELETE' }));
+        toast(res.ok ? 'Interest cancelled' : errText(res), res.ok ? 'ok' : 'bad'); if (res.ok && refresh) refresh();
+      } }, 'Cancel')))));
+}
+
+function userList(list) {
+  return h('div', { class: 'grid auto' }, list.map((u) => {
+    const id = idOf(u) || u.userId;
+    const name = u.fullName || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.username || u.email;
+    const call = async (label, path, method, json) => {
+      const res = await api('listing', path, { method, json });
+      toast(label + ': ' + (res.ok ? 'done' : errText(res)), res.ok ? 'ok' : 'bad');
+    };
+    return h('div', { class: 'card' },
+      h('div', { class: 'row' }, h('div', { class: 'avatar' }, (name || '?').slice(0, 1).toUpperCase()), h('div', null, h('b', null, name), h('div', { class: 'muted tiny' }, u.email))),
+      h('div', { class: 'row gap-s', style: { margin: '8px 0' } }, u.role ? h('span', { class: 'chip brand' }, u.role) : null, u.country ? h('span', { class: 'chip' }, u.country) : null),
+      h('div', { class: 'idline', onclick: () => copy(id, 'User id') }, id),
+      h('div', { class: 'row gap-s', style: { marginTop: '8px' } },
+        h('button', { class: 'btn sm', onclick: () => { setCtx('user_id', id); toast('Working user set'); } }, 'Use id'),
+        h('button', { class: 'btn sm', onclick: () => call('Profile view', '/social/views/' + encodeURIComponent(id), 'POST') }, 'View'),
+        h('button', { class: 'btn sm', onclick: () => call('Follow', '/social/follow', 'POST', { targetId: id }) }, 'Follow'),
+        h('button', { class: 'btn sm', onclick: () => call('Like', '/social/like', 'POST', { targetId: id }) }, 'Like')));
+  }));
+}
+
+/* ====================== listing drawer ====================== */
+function openListing(id, preset) {
+  openDrawer(preset && preset.title ? preset.title : 'Listing', (body, close, titleEl) => {
+    const holder = h('div', { class: 'col' }, h('div', { class: 'empty' }, 'Loading listing...'));
+    body.appendChild(holder);
+    (async () => {
+      const res = await api('listing', '/listings/' + encodeURIComponent(id), { anon: true });
+      if (!res.ok) { clear(holder).append(h('div', { class: 'notice bad' }, errText(res)), resultBox(res, {})); return; }
+      const l = unwrap(res.data) || {};
+      if (l.ownerId) setCtx('owner_id', l.ownerId);
+      titleEl.textContent = l.title || 'Listing';
+      clear(holder).append(...listingDetail(l, close));
+    })();
+  });
+}
+
+function listingDetail(l, close) {
+  const id = idOf(l);
+  const imgs = listingImages(l);
+  const mine = me().userId && l.ownerId && me().userId === l.ownerId;
+  const bigEl = h('div', { class: 'big' }, catArt(l.category), imgs.length ? h('img', { src: withSize(imgs[0], 'original'), alt: '' }) : null);
+  const thumbs = h('div', { class: 'thumbs' }, imgs.length > 1 ? imgs.map((u, i) => h('button', { class: 'thumb' + (i === 0 ? ' on' : ''), 'aria-label': 'Show image ' + (i + 1), onclick: (e) => {
+    clear(bigEl).appendChild(h('img', { src: withSize(u, 'original'), alt: '' }));
+    $$('.thumb', thumbs).forEach((t) => t.classList.remove('on')); e.currentTarget.classList.add('on');
+  } }, h('img', { src: withSize(u, 'thumb'), alt: '' }))) : null);
+  const gallery = h('div', { class: 'gal' }, bigEl, imgs.length > 1 ? thumbs : null);
+
+  const facts = [];
+  const add = (k, v) => { if (v !== undefined && v !== null && v !== '' && v !== false) facts.push(h('dt', null, k), h('dd', null, v === true ? 'Yes' : String(v))); };
+  add('Category', pretty(l.category));
+  add('Address', [l.address, l.city, l.country].filter(Boolean).join(', '));
+  add('Guests', l.maxGuests); add('Bedrooms', l.bedrooms); add('Bathrooms', l.bathrooms);
+  add('Wifi', l.hasWifi); add('Kitchen', l.hasKitchen); add('Furnished', l.furnished);
+  add('Cancellation policy', pretty(l.cancellationPolicy)); add('Min lease months', l.minLeaseMonths);
+  add('Deposit', l.depositAmount); add('Lease months', l.leaseDurationMonths); add('Size (acres)', l.sizeInAcres);
+  add('Land use', l.landUseType); add('Title deed', l.hasTitleDeed); add('Floors', l.floors); add('Plot size', l.plotSize);
+  add('Garage', l.hasGarage); add('Property type', l.propertyType);
+  const info = h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, l.title), l.status ? statusChip(l.status) : null, l.archived ? h('span', { class: 'chip' }, 'archived') : null, mine ? h('span', { class: 'chip sun' }, 'yours') : null),
+    h('div', { style: { margin: '4px 0 10px' } }, priceView(l)),
+    l.description ? h('p', { style: { margin: '0 0 10px' } }, l.description) : null,
+    l.amenities && l.amenities.length ? h('div', { class: 'row gap-s', style: { marginBottom: '10px' } }, l.amenities.map((a) => h('span', { class: 'chip brand' }, a))) : null,
+    h('dl', { class: 'kv' }, facts),
+    h('div', { class: 'row', style: { marginTop: '10px' } },
+      h('span', { class: 'idline', onclick: () => copy(id, 'Listing id') }, 'listing ' + id),
+      l.ownerId ? h('span', { class: 'idline', onclick: () => copy(l.ownerId, 'Owner id') }, 'owner ' + l.ownerId) : null));
+
+  const out = [gallery, info];
+  if (l.latitude !== undefined && l.longitude !== undefined && l.latitude !== null) {
+    out.push(h('div', { class: 'muted tiny' }, 'Location ' + l.latitude + ', ' + l.longitude + '  ', h('a', { href: 'https://www.openstreetmap.org/?mlat=' + l.latitude + '&mlon=' + l.longitude + '#map=15/' + l.latitude + '/' + l.longitude, target: '_blank', rel: 'noopener' }, 'open map')));
+  }
+  if (l.category === 'SHORT_TERM_RENTAL' || l.pricePerNight || l.pricePerDay) out.push(bookingPanel(l));
+  else out.push(h('div', { class: 'notice' }, 'Bookings and availability apply to short term rentals. This listing takes interest requests instead.'));
+  out.push(interestPanel(l));
+  out.push(ownerPanel(l, close));
+  return out;
+}
+
+function bookingPanel(l) {
+  const id = idOf(l);
+  const priceUnits = [];
+  if (l.pricePerNight) priceUnits.push('PER_NIGHT');
+  if (l.pricePerDay) priceUnits.push('PER_DAY');
+  if (!priceUnits.length) priceUnits.push('PER_NIGHT', 'PER_DAY');
+  const inD = h('input', { type: 'date', value: dateOnly(30) });
+  const inT = h('input', { type: 'time', value: '14:00' });
+  const outD = h('input', { type: 'date', value: dateOnly(33) });
+  const outT = h('input', { type: 'time', value: '11:00' });
+  const unit = sel(priceUnits, priceUnits[0]);
+  const key = h('input', { type: 'text', value: uid() });
+  const keep = h('input', { type: 'checkbox' });
+  const est = h('div', { class: 'muted tiny' });
+  const result = h('div');
+  const cal = availabilityCalendar(id, { onRange: (s, e) => { inD.value = s; if (e) outD.value = e; recalc(); } });
+
+  function recalc() {
+    const a = new Date(inD.value); const b = new Date(outD.value);
+    const n = Math.round((b - a) / 864e5);
+    const rate = unit.value === 'PER_DAY' ? l.pricePerDay : l.pricePerNight;
+    if (n > 0 && rate) est.textContent = n + ' x ' + fmtMoney(rate, l.currency || 'USD') + ' = ' + fmtMoney(n * rate, l.currency || 'USD') + ' (estimate; the wallet fee is added at payment)';
+    else est.textContent = n <= 0 ? 'Check out must be after check in.' : '';
+  }
+  [inD, outD, unit].forEach((e) => e.addEventListener('input', recalc));
+  recalc();
+
+  const book = async (btn) => {
+    const body = { listingId: id, checkIn: inD.value + 'T' + inT.value + ':00', checkOut: outD.value + 'T' + outT.value + ':00', priceUnit: unit.value };
+    const res = await withBusy(btn, () => api('listing', '/bookings', { method: 'POST', json: body, headers: { 'Idempotency-Key': key.value } }));
+    const sent = key.value;
+    if (res.status && !keep.checked) key.value = uid();
+    clear(result);
+    result.appendChild(h('div', { class: 'tiny muted' }, 'Sent Idempotency-Key ' + sent));
+    const d = unwrap(res.data);
+    if (res.ok && isBooking(d)) {
+      setCtx('booking_id', d.id); setCtx('escrow_hold_reference', 'booking-' + d.id);
+      result.appendChild(bookingCard(d, 'tenant'));
+      toast(d.success === false ? (d.message || 'Booking not successful') : 'Booking ' + pretty(d.status).toLowerCase(), d.success === false ? 'bad' : 'ok');
+      cal.reload();
+    } else result.appendChild(resultBox(res, {}));
+  };
+
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, 'Book this stay'), h('span', { class: 'tag' }, 'POST /bookings')),
+    h('div', { class: 'grid g2' },
+      cal,
+      h('div', { class: 'col' },
+        h('div', { class: 'grid g2' }, field('Check in', inD), field('Time', inT), field('Check out', outD), field('Time', outT)),
+        field('Price unit', unit), est,
+        field('Idempotency-Key', h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, key, h('button', { class: 'btn sm', onclick: () => { key.value = uid(); } }, 'New'))),
+        h('label', { class: 'chk tiny' }, keep, 'Keep this key for the next send (a repeat should return the same booking)'),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn primary', onclick: (e) => book(e.currentTarget) }, 'Book now'),
+          h('button', { class: 'btn', onclick: () => cal.reload() }, 'Refresh calendar')))),
+    result);
+}
+function dateOnly(days) { return ymd(new Date(Date.now() + days * 864e5)); }
+
+function interestPanel(l) {
+  const msg = h('textarea', { style: { minHeight: '70px', fontFamily: 'var(--sans)' } }, 'Looking to move in next month, is it still available?');
+  const out = h('div');
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, 'Express interest'), h('span', { class: 'tag' }, 'POST /interests')),
+    field('Message to the owner', msg),
+    h('div', { class: 'row', style: { marginTop: '10px' } },
+      h('button', { class: 'btn primary', onclick: async (e) => {
+        const res = await withBusy(e.currentTarget, () => api('listing', '/interests', { method: 'POST', json: { listingId: idOf(l), message: msg.value } }));
+        clear(out).appendChild(resultBox(res, {}));
+        const d = unwrap(res.data); if (res.ok && d && d.id) setCtx('interest_id', d.id);
+        toast(res.ok ? 'Interest sent' : errText(res), res.ok ? 'ok' : 'bad');
+      } }, 'Send interest')),
+    out);
+}
+
+function ownerPanel(l, close) {
+  const oid = l.ownerId;
+  const out = h('div');
+  const run = async (btn, method, path, json) => {
+    const res = await withBusy(btn, () => api('listing', path, { method, json }));
+    clear(out).appendChild(resultBox(res, {}));
+    return res;
+  };
+  const mine = me().userId && oid && me().userId === oid;
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, 'Owner and community')),
+    oid ? h('div', { class: 'row gap-s' },
+      h('button', { class: 'btn sm', onclick: (e) => { setCtx('user_id', oid); run(e.currentTarget, 'GET', '/social/profile/user/' + encodeURIComponent(oid)); } }, 'Profile'),
+      h('button', { class: 'btn sm', onclick: (e) => run(e.currentTarget, 'POST', '/social/views/' + encodeURIComponent(oid)) }, 'Record view'),
+      h('button', { class: 'btn sm', onclick: (e) => run(e.currentTarget, 'POST', '/social/follow', { targetId: oid }) }, 'Follow'),
+      h('button', { class: 'btn sm', onclick: (e) => run(e.currentTarget, 'POST', '/social/like', { targetId: oid }) }, 'Like'),
+      h('button', { class: 'btn sm', onclick: (e) => run(e.currentTarget, 'GET', '/social/reviews/' + encodeURIComponent(oid)) }, 'Reviews'),
+      h('button', { class: 'btn sm', onclick: (e) => run(e.currentTarget, 'GET', '/social/stats/' + encodeURIComponent(oid)) }, 'Stats'),
+      h('button', { class: 'btn sm', onclick: (e) => run(e.currentTarget, 'GET', '/listings/owner/' + encodeURIComponent(oid)) }, 'Their listings'),
+      h('button', { class: 'btn sm', onclick: async () => {
+        const r = await promptBox('Review the owner', [{ n: 'rating', label: 'Rating 1 to 5', type: 'number', def: 5 }, { n: 'comment', label: 'Comment', def: 'Great host.' }]);
+        if (!r) return;
+        const res = await api('listing', '/social/review', { method: 'POST', json: { targetId: oid, rating: Number(r.rating), comment: r.comment } });
+        clear(out).appendChild(resultBox(res, {})); const d = unwrap(res.data); if (res.ok && d && (d.id || d.reviewId)) setCtx('review_id', d.id || d.reviewId);
+      } }, 'Write review'))
+      : h('div', { class: 'muted' }, 'This listing did not include an owner id.'),
+    mine ? h('div', { class: 'row gap-s', style: { marginTop: '10px' } },
+      h('button', { class: 'btn sm primary', onclick: () => { setCtx('listing_id', idOf(l)); close(); go('host', 'edit'); } }, 'Edit in Host'),
+      h('button', { class: 'btn sm', onclick: () => { setCtx('listing_id', idOf(l)); close(); go('host', 'images'); } }, 'Manage images'),
+      h('button', { class: 'btn sm', onclick: () => { setCtx('listing_id', idOf(l)); close(); go('host', 'dates'); } }, 'Block dates')) : null,
+    out);
+}
+
+/* ====================== discover ====================== */
+function screenDiscover(root) {
+  const modes = ['Search', 'Short term', 'Nearby', 'City', 'Map bounds'];
+  let mode = store.get('pl-dmode', 'Search');
+  const f = {
+    query: h('input', { placeholder: 'e.g. studio' }),
+    category: sel(['', 'SHORT_TERM_RENTAL', 'LONG_TERM_RENTAL', 'LEASE', 'HOUSE_SALE', 'LAND_SALE'], ''),
+    city: h('input', { placeholder: 'City', value: 'Nairobi' }),
+    minPrice: h('input', { type: 'number' }),
+    maxPrice: h('input', { type: 'number' }),
+    lat: h('input', { type: 'number', step: 'any', value: -1.2921 }), lng: h('input', { type: 'number', step: 'any', value: 36.8219 }), radius: h('input', { type: 'number', value: 10 }),
+    minLat: h('input', { type: 'number', step: 'any', value: -1.3 }), maxLat: h('input', { type: 'number', step: 'any', value: -1.2 }),
+    minLng: h('input', { type: 'number', step: 'any', value: 36.7 }), maxLng: h('input', { type: 'number', step: 'any', value: 36.9 })
+  };
+  const results = h('div');
+  const filters = h('div', { class: 'filters' });
+  const pills = h('div', { class: 'pill-tabs' });
+
+  function drawFilters() {
+    clear(filters);
+    const F = (label, el) => field(label, el);
+    if (mode === 'Search') filters.append(F('Keyword', f.query), F('Category', f.category), F('City', f.city), F('Min price', f.minPrice), F('Max price', f.maxPrice));
+    if (mode === 'Short term') filters.append(F('City', f.city));
+    if (mode === 'Nearby') filters.append(F('Latitude', f.lat), F('Longitude', f.lng), F('Radius (km)', f.radius), h('button', { class: 'btn', onclick: () => navigator.geolocation && navigator.geolocation.getCurrentPosition((p) => { f.lat.value = p.coords.latitude; f.lng.value = p.coords.longitude; }, () => toast('Location access was blocked', 'bad')) }, 'Use my location'));
+    if (mode === 'City') filters.append(F('City', f.city));
+    if (mode === 'Map bounds') filters.append(F('Min latitude', f.minLat), F('Max latitude', f.maxLat), F('Min longitude', f.minLng), F('Max longitude', f.maxLng));
+    filters.append(h('button', { class: 'btn primary', onclick: (e) => run(e.currentTarget) }, 'Search'));
+    $$('button', pills).forEach((b) => b.classList.toggle('on', b.textContent === mode));
+  }
+  modes.forEach((m) => pills.appendChild(h('button', { onclick: () => { mode = m; store.set('pl-dmode', m); drawFilters(); run(); } }, m)));
+
+  async function run(btn) {
+    let path; let query = {};
+    if (mode === 'Search') { path = '/listings/search'; query = { query: f.query.value, category: f.category.value, city: f.city.value, minPrice: f.minPrice.value, maxPrice: f.maxPrice.value }; }
+    if (mode === 'Short term') { path = '/listings/short-term'; query = { city: f.city.value }; }
+    if (mode === 'Nearby') { path = '/locations/nearby'; query = { latitude: f.lat.value, longitude: f.lng.value, radiusKm: f.radius.value }; }
+    if (mode === 'City') { path = '/locations/city'; query = { city: f.city.value }; }
+    if (mode === 'Map bounds') { path = '/locations/bounds'; query = { minLat: f.minLat.value, maxLat: f.maxLat.value, minLng: f.minLng.value, maxLng: f.maxLng.value }; }
+    clear(results).appendChild(h('div', { class: 'empty' }, 'Searching...'));
+    const res = await withBusy(btn, () => api('listing', path, { query, anon: true }));
+    clear(results);
+    if (!res.ok) { results.appendChild(h('div', { class: 'notice bad' }, errText(res), res.hint ? h('div', { class: 'tiny' }, res.hint) : null)); results.appendChild(resultBox(res, {})); return; }
+    const list = asList(res.data) || [];
+    results.appendChild(h('div', { class: 'row', style: { marginBottom: '10px' } }, h('b', null, list.length + ' result(s)'), h('span', { class: 'muted tiny' }, res.method + ' ' + res.url),
+      h('button', { class: 'btn sm', onclick: () => { clear(results).appendChild(resultBox(res, {})); } }, 'Raw response')));
+    results.appendChild(listingGrid(list));
+  }
+
+  root.append(
+    pageHead('Discover', 'Live listings from the search, location and short term endpoints. Open one to check dates, book or send an interest.'),
+    h('div', { class: 'toolbar' }, pills, filters),
+    results);
+  drawFilters();
+  run();
+}
+
+/* ====================== shared bits ====================== */
+function livePanel(key, o) {
+  const c = endpointCard(EP[key], Object.assign({ open: true }, o));
+  setTimeout(() => c.send(), 0);
+  return c;
+}
+function tabbed(root, screenId, items, defId) {
+  S.tabs = S.tabs || {};
+  const active = S.tabs[screenId] && items.find((i) => i.id === S.tabs[screenId]) ? S.tabs[screenId] : (defId || items[0].id);
+  const bar = h('div', { class: 'tabs' });
+  const pane = h('div', { class: 'col' });
+  const show = (id) => {
+    S.tabs[screenId] = id;
+    $$('button', bar).forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+    clear(pane);
+    items.find((i) => i.id === id).render(pane);
+  };
+  items.forEach((i) => bar.appendChild(h('button', { 'data-id': i.id, onclick: () => show(i.id) }, i.label)));
+  root.append(bar, pane);
+  show(active);
+}
+function pageHead(title, sub, right) {
+  return h('div', { class: 'page-head' }, h('div', null, h('h2', null, title), sub ? h('p', null, sub) : null), right || null);
+}
+function accordion(keys, openFirst) {
+  return h('div', { class: 'col' }, keys.map((k, i) => endpointCard(EP[k], { open: openFirst && i === 0 })));
+}
+
+/* ====================== trips ====================== */
+function screenTrips(root) {
+  root.appendChild(pageHead('My trips', 'Bookings you made as a tenant, cancellations with refund quotes, and the interests you sent.'));
+  tabbed(root, 'trips', [
+    { id: 'bookings', label: 'My bookings', render: (p) => { p.append(livePanel('GET /bookings/me'), h('h4', null, 'Cancellation quote by id'), endpointCard(EP['GET /bookings/{booking_id}/cancellation-quote']), endpointCard(EP['POST /bookings/{booking_id}/cancel'])); } },
+    { id: 'new', label: 'New booking (raw)', render: (p) => { p.append(h('div', { class: 'notice' }, 'The listing page has the full booking screen with a calendar. This card is the bare endpoint with the Idempotency-Key control.'), endpointCard(EP['POST /bookings'], { open: true })); } },
+    { id: 'interests', label: 'My interests', render: (p) => { p.append(livePanel('GET /interests/me'), endpointCard(EP['POST /interests']), endpointCard(EP['DELETE /interests/{interest_id}'])); } }
+  ]);
+}
+
+/* ====================== host ====================== */
+const FORM_FIELDS = [
+  { n: 'title', t: 'text', wide: true }, { n: 'description', t: 'textarea', wide: true },
+  { n: 'category', t: 'select', opts: ['SHORT_TERM_RENTAL', 'LONG_TERM_RENTAL', 'LEASE', 'HOUSE_SALE', 'LAND_SALE'] },
+  { n: 'price', t: 'number', cats: ['LONG_TERM_RENTAL', 'LEASE', 'HOUSE_SALE', 'LAND_SALE'] },
+  { n: 'priceUnit', t: 'select', opts: ['', 'PER_NIGHT', 'PER_DAY', 'PER_MONTH', 'TOTAL'], cats: ['LONG_TERM_RENTAL', 'LEASE', 'HOUSE_SALE', 'LAND_SALE'] },
+  { n: 'pricePerNight', t: 'number', cats: ['SHORT_TERM_RENTAL'] }, { n: 'pricePerDay', t: 'number', cats: ['SHORT_TERM_RENTAL'] },
+  { n: 'latitude', t: 'number' }, { n: 'longitude', t: 'number' }, { n: 'address', t: 'text' }, { n: 'city', t: 'text' }, { n: 'country', t: 'text' },
+  { n: 'maxGuests', t: 'number', cats: ['SHORT_TERM_RENTAL'] },
+  { n: 'bedrooms', t: 'number', cats: ['SHORT_TERM_RENTAL', 'LONG_TERM_RENTAL', 'LEASE', 'HOUSE_SALE'] },
+  { n: 'bathrooms', t: 'number', cats: ['SHORT_TERM_RENTAL', 'LONG_TERM_RENTAL', 'LEASE', 'HOUSE_SALE'] },
+  { n: 'hasWifi', t: 'bool', cats: ['SHORT_TERM_RENTAL'] }, { n: 'hasKitchen', t: 'bool', cats: ['SHORT_TERM_RENTAL'] },
+  { n: 'amenities', t: 'list', cats: ['SHORT_TERM_RENTAL'], hint: 'comma separated', wide: true },
+  { n: 'cancellationPolicy', t: 'select', opts: ['', 'FLEXIBLE', 'MODERATE', 'STRICT'], cats: ['SHORT_TERM_RENTAL'] },
+  { n: 'minLeaseMonths', t: 'number', cats: ['LONG_TERM_RENTAL'] }, { n: 'furnished', t: 'bool', cats: ['LONG_TERM_RENTAL'] },
+  { n: 'tenantRequirements', t: 'text', cats: ['LONG_TERM_RENTAL'], wide: true },
+  { n: 'leaseDurationMonths', t: 'number', cats: ['LEASE'] }, { n: 'depositAmount', t: 'number', cats: ['LEASE', 'LONG_TERM_RENTAL'] },
+  { n: 'leaseTerms', t: 'text', cats: ['LEASE'], wide: true }, { n: 'renewable', t: 'bool', cats: ['LEASE'] },
+  { n: 'floors', t: 'number', cats: ['HOUSE_SALE'] }, { n: 'plotSize', t: 'number', cats: ['HOUSE_SALE'] },
+  { n: 'hasGarage', t: 'bool', cats: ['HOUSE_SALE'] }, { n: 'propertyType', t: 'text', cats: ['HOUSE_SALE'] },
+  { n: 'sizeInAcres', t: 'number', cats: ['LAND_SALE'] }, { n: 'landUseType', t: 'text', cats: ['LAND_SALE'] }, { n: 'hasTitleDeed', t: 'bool', cats: ['LAND_SALE'] }
+];
+
+function listingForm(preloadId) {
+  const inputs = {};
+  const grid = h('div', { class: 'grid g3' });
+  const files = h('input', { type: 'file', multiple: true, accept: 'image/*' });
+  const showAll = h('input', { type: 'checkbox' });
+  const idIn = h('input', { type: 'text', value: preloadId || '', placeholder: 'Listing id to edit (blank to create)' });
+  const out = h('div');
+  const prev = h('div', { class: 'row gap-s' });
+
+  FORM_FIELDS.forEach((f) => {
+    let el;
+    if (f.t === 'select') el = sel(f.opts, f.opts[0]);
+    else if (f.t === 'bool') el = h('input', { type: 'checkbox' });
+    else if (f.t === 'textarea') el = h('textarea', { style: { fontFamily: 'var(--sans)', minHeight: '70px' } });
+    else el = h('input', { type: f.t === 'number' ? 'number' : 'text', step: f.t === 'number' ? 'any' : undefined });
+    inputs[f.n] = el;
+    f.wrap = f.t === 'bool' ? h('label', { class: 'chk' }, el, f.n) : field(f.n, el, f.hint ? '(' + f.hint + ')' : '');
+    if (f.wide) f.wrap.style.gridColumn = '1 / -1';
+    grid.appendChild(f.wrap);
+  });
+
+  const apply = () => {
+    const cat = inputs.category.value;
+    FORM_FIELDS.forEach((f) => { f.wrap.classList.toggle('hidden', !!f.cats && !showAll.checked && !f.cats.includes(cat)); });
+  };
+  inputs.category.addEventListener('input', apply);
+  showAll.addEventListener('input', apply);
+
+  const fill = (l) => {
+    FORM_FIELDS.forEach((f) => {
+      const v = l[f.n]; const el = inputs[f.n];
+      if (f.t === 'bool') el.checked = !!v;
+      else if (f.t === 'list') el.value = Array.isArray(v) ? v.join(', ') : '';
+      else if (v !== undefined && v !== null) el.value = v;
+    });
+    apply();
+  };
+  const sample = () => fill({ title: 'Cozy Studio in Kilimani', description: 'Bright, modern studio near Yaya Centre.', category: 'SHORT_TERM_RENTAL', pricePerDay: 40, pricePerNight: 55, latitude: -1.2921, longitude: 36.7833, address: 'Argwings Kodhek Road', city: 'Nairobi', country: 'Kenya', maxGuests: 2, cancellationPolicy: 'MODERATE', bedrooms: 1, bathrooms: 1, hasWifi: true, hasKitchen: true, amenities: ['Parking', 'Backup Generator'] });
+
+  const load = async (btn) => {
+    if (!idIn.value) { toast('Enter a listing id', 'bad'); return; }
+    const res = await withBusy(btn, () => api('listing', '/listings/' + encodeURIComponent(idIn.value), { anon: true }));
+    if (!res.ok) { toast(errText(res), 'bad'); return; }
+    fill(unwrap(res.data) || {}); setCtx('listing_id', idIn.value); toast('Loaded into the form');
+  };
+
+  const build = () => {
+    const o = {};
+    FORM_FIELDS.forEach((f) => {
+      const el = inputs[f.n];
+      if (f.wrap.classList.contains('hidden')) return;
+      if (f.t === 'bool') { if (el.checked) o[f.n] = true; return; }
+      if (el.value === '') return;
+      o[f.n] = f.t === 'number' ? Number(el.value) : f.t === 'list' ? el.value.split(',').map((x) => x.trim()).filter(Boolean) : el.value;
+    });
+    return o;
+  };
+
+  const submit = async (btn) => {
+    const editing = idIn.value.trim();
+    const fd = new FormData();
+    fd.append('request', new Blob([JSON.stringify(build())], { type: 'application/json' }));
+    [...files.files].forEach((f) => fd.append('files', f, f.name));
+    const res = await withBusy(btn, () => api('listing', editing ? '/listings/' + encodeURIComponent(editing) : '/listings', { method: editing ? 'PUT' : 'POST', form: fd }));
+    clear(out).appendChild(resultBox(res, {}));
+    const d = unwrap(res.data);
+    if (res.ok && d && d.id) { setCtx('listing_id', d.id); if (d.ownerId) setCtx('owner_id', d.ownerId); idIn.value = d.id; }
+    toast(res.ok ? (editing ? 'Listing updated' : 'Listing created') : errText(res), res.ok ? 'ok' : 'bad');
+  };
+
+  files.addEventListener('input', () => {
+    clear(prev);
+    [...files.files].forEach((f) => prev.appendChild(h('img', { src: URL.createObjectURL(f), style: { width: '64px', height: '48px', objectFit: 'cover', borderRadius: '6px' } })));
+  });
+
+  apply();
+  if (preloadId) setTimeout(() => load(), 0);
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, 'Create or edit a listing'), h('span', { class: 'tag' }, 'POST or PUT /listings')),
+    h('div', { class: 'row', style: { marginBottom: '12px' } }, h('div', { style: { flex: 1, minWidth: '240px' } }, idIn),
+      h('button', { class: 'btn', onclick: (e) => load(e.currentTarget) }, 'Load listing'), h('button', { class: 'btn', onclick: () => { idIn.value = ''; sample(); } }, 'Fill sample'),
+      h('label', { class: 'chk tiny' }, showAll, 'Show every field')),
+    grid,
+    h('div', { class: 'row', style: { margin: '12px 0' } }, field('Images', files), prev),
+    h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: (e) => submit(e.currentTarget) }, 'Save listing'),
+      h('span', { class: 'muted tiny' }, 'Blank id creates (POST). An id updates (PUT). New listings start as PENDING until an admin approves them.')),
+    out);
+}
+
+function imageManager() {
+  const root = h('div', { class: 'col' });
+  const idIn = h('input', { type: 'text', value: S.ctx.listing_id, placeholder: 'listing id' });
+  bus.addEventListener('ctx', (e) => { if (e.detail.key === 'listing_id') idIn.value = e.detail.val; });
+  const area = h('div');
+  const addFiles = h('input', { type: 'file', multiple: true, accept: 'image/*' });
+  let urls = []; let main = '';
+  const msg = h('div');
+
+  const fromResp = (d) => { d = unwrap(d) || {}; urls = d.imageUrls || []; main = d.mainImageUrl || ''; draw(); };
+  const call = async (btn, method, path, json, form) => {
+    const res = await withBusy(btn, () => api('listing', path, { method, json, form }));
+    clear(msg).appendChild(res.ok ? h('div', { class: 'notice ok' }, method + ' ' + path + ' ok') : h('div', { class: 'notice bad' }, errText(res)));
+    if (res.ok) fromResp(res.data);
+    return res;
+  };
+  const base = () => '/listings/' + encodeURIComponent(idIn.value);
+
+  function draw() {
+    clear(area);
+    if (!urls.length) { area.appendChild(h('div', { class: 'empty' }, 'No images on this listing yet.')); return; }
+    const fig = h('div', { class: 'imgman' });
+    urls.forEach((u, i) => {
+      const fid = fileIdOf(u);
+      fig.appendChild(h('figure', null, h('img', { src: withSize(u, 'thumb'), alt: '' }),
+        h('figcaption', null,
+          u === main ? h('span', { class: 'chip ok' }, 'cover') : null,
+          h('button', { class: 'btn sm', onclick: () => { setCtx('file_id', fid); toast('file id set'); } }, 'Use id'),
+          h('button', { class: 'btn sm', disabled: u === main, onclick: (e) => call(e.currentTarget, 'PUT', base() + '/images/cover', { fileId: fid }) }, 'Cover'),
+          h('button', { class: 'btn sm', disabled: i === 0, onclick: () => { [urls[i - 1], urls[i]] = [urls[i], urls[i - 1]]; draw(); } }, 'Up'),
+          h('button', { class: 'btn sm', disabled: i === urls.length - 1, onclick: () => { [urls[i + 1], urls[i]] = [urls[i], urls[i + 1]]; draw(); } }, 'Down'),
+          h('button', { class: 'btn sm danger', onclick: async (e) => { if (await confirmBox('Remove image', 'Delete this image from the listing?', true, 'Remove')) call(e.currentTarget, 'DELETE', base() + '/images/' + encodeURIComponent(fid)); } }, 'Remove'))));
+    });
+    area.append(fig, h('div', { class: 'row', style: { marginTop: '10px' } },
+      h('button', { class: 'btn primary', onclick: (e) => call(e.currentTarget, 'PUT', base() + '/images/order', { fileIds: urls.map(fileIdOf) }) }, 'Save this order'),
+      h('span', { class: 'muted tiny' }, 'Up and Down change the order here; Save sends PUT images/order.')));
+  }
+
+  const load = async (btn) => {
+    const res = await withBusy(btn, () => api('listing', base(), { anon: true }));
+    if (!res.ok) { clear(msg).appendChild(h('div', { class: 'notice bad' }, errText(res))); return; }
+    const l = unwrap(res.data) || {};
+    urls = (l.imageUrls || []).slice(); main = l.mainImageUrl || ''; setCtx('listing_id', idIn.value); draw();
+  };
+
+  const standalone = h('input', { type: 'file', multiple: true, accept: 'image/*' });
+  const upOut = h('div');
+  const sizeFid = h('input', { type: 'text', value: S.ctx.file_id, placeholder: 'file id' });
+  bus.addEventListener('ctx', (e) => { if (e.detail.key === 'file_id') sizeFid.value = e.detail.val; });
+  const sizeSel = sel(['thumb', 'medium', 'original'], 'medium');
+  const sizeOut = h('div');
+
+  root.append(
+    h('div', { class: 'card' },
+      h('div', { class: 'card-h' }, h('h3', null, 'Image manager'), h('span', { class: 'tag' }, '/listings/{id}/images')),
+      h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '240px' } }, idIn), h('button', { class: 'btn', onclick: (e) => load(e.currentTarget) }, 'Load images')),
+      h('div', { style: { height: '10px' } }), msg, area,
+      h('div', { class: 'hr' }),
+      h('div', { class: 'row' }, field('Add images', addFiles), h('button', { class: 'btn primary', style: { alignSelf: 'flex-end' }, onclick: (e) => {
+        if (!addFiles.files.length) { toast('Pick files first', 'bad'); return; }
+        const fd = new FormData(); [...addFiles.files].forEach((f) => fd.append('files', f, f.name));
+        call(e.currentTarget, 'POST', base() + '/images', undefined, fd);
+      } }, 'Upload to listing'))),
+    h('div', { class: 'card' },
+      h('div', { class: 'card-h' }, h('h3', null, 'Public image endpoint'), h('span', { class: 'tag' }, 'GET /images/{fileId}?size=')),
+      h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '220px' } }, sizeFid), sizeSel, h('button', { class: 'btn', onclick: async () => {
+        const url = buildUrl('listing', '/images/' + encodeURIComponent(sizeFid.value), { size: sizeSel.value });
+        clear(sizeOut).appendChild(h('div', null, h('div', { class: 'path', style: { marginBottom: '6px' } }, url), h('img', { src: url, style: { maxWidth: '100%', maxHeight: '320px', borderRadius: '10px' }, onerror: (e) => { e.target.replaceWith(h('div', { class: 'notice bad' }, 'Image did not load (check the file id and the service).')); } })));
+      } }, 'Show')), h('div', { style: { height: '8px' } }), sizeOut),
+    h('div', { class: 'card' },
+      h('div', { class: 'card-h' }, h('h3', null, 'Upload images without a listing'), h('span', { class: 'tag' }, 'POST /listings/upload-images')),
+      h('div', { class: 'row' }, field('Files', standalone), h('button', { class: 'btn', style: { alignSelf: 'flex-end' }, onclick: async (e) => {
+        if (!standalone.files.length) { toast('Pick files first', 'bad'); return; }
+        const fd = new FormData(); [...standalone.files].forEach((f) => fd.append('files', f, f.name));
+        const res = await withBusy(e.currentTarget, () => api('listing', '/listings/upload-images', { method: 'POST', form: fd }));
+        clear(upOut).appendChild(resultBox(res, {}));
+        const urlsOut = asList(res.data); if (res.ok && urlsOut && urlsOut.length) setCtx('file_id', fileIdOf(urlsOut[0]));
+      } }, 'Upload')), upOut));
+  if (idIn.value) setTimeout(() => load(), 0);
+  return root;
+}
+
+function datesPanel() {
+  const idIn = h('input', { type: 'text', value: S.ctx.listing_id, placeholder: 'listing id' });
+  bus.addEventListener('ctx', (e) => { if (e.detail.key === 'listing_id') idIn.value = e.detail.val; });
+  const from = h('input', { type: 'date' }); const to = h('input', { type: 'date' });
+  const calHolder = h('div'); const out = h('div'); const blocksEl = h('div');
+  let cal = null;
+  const blocks = () => store.get('pl-blocks', []);
+  const drawBlocks = () => {
+    clear(blocksEl);
+    const mine = blocks().filter((b) => b.listingId === idIn.value);
+    if (!mine.length) { blocksEl.appendChild(h('div', { class: 'muted tiny' }, 'Blocks made from this page are listed here (the API has no list endpoint).')); return; }
+    blocksEl.appendChild(h('table', { class: 'tbl' }, h('thead', null, h('tr', null, h('th', null, 'From'), h('th', null, 'To'), h('th', null, 'Block id'), h('th', null, ''))),
+      h('tbody', null, mine.map((b) => h('tr', null, h('td', null, b.from), h('td', null, b.to), h('td', { class: 'mono tiny' }, b.blockId),
+        h('td', null, h('button', { class: 'btn sm danger', onclick: async (e) => {
+          const res = await withBusy(e.currentTarget, () => api('listing', '/listings/' + encodeURIComponent(b.listingId) + '/blocked-dates/' + encodeURIComponent(b.blockId), { method: 'DELETE' }));
+          toast(res.ok ? 'Unblocked' : errText(res), res.ok ? 'ok' : 'bad');
+          if (res.ok || res.status === 404) { store.set('pl-blocks', blocks().filter((x) => x.blockId !== b.blockId)); drawBlocks(); if (cal) cal.reload(); }
+        } }, 'Unblock')))))));
+  };
+  const mount = () => { clear(calHolder); if (!idIn.value) { calHolder.appendChild(h('div', { class: 'empty' }, 'Enter a listing id.')); return; } cal = availabilityCalendar(idIn.value, { onRange: (s, e) => { from.value = s; if (e) to.value = e; } }); calHolder.appendChild(cal); drawBlocks(); };
+  idIn.addEventListener('change', mount);
+  setTimeout(mount, 0);
+  return h('div', { class: 'col' },
+    h('div', { class: 'card' },
+      h('div', { class: 'card-h' }, h('h3', null, 'Availability and blocked dates'), h('span', { class: 'tag' }, '/listings/{id}/availability, /blocked-dates')),
+      h('div', { class: 'row', style: { marginBottom: '10px' } }, h('div', { style: { flex: 1, minWidth: '240px' } }, idIn), h('button', { class: 'btn', onclick: mount }, 'Load calendar')),
+      h('div', { class: 'grid g2' }, calHolder,
+        h('div', { class: 'col' }, h('div', { class: 'grid g2' }, field('Block from', from), field('Block to (stays open)', to)),
+          h('button', { class: 'btn primary', onclick: async (e) => {
+            const res = await withBusy(e.currentTarget, () => api('listing', '/listings/' + encodeURIComponent(idIn.value) + '/blocked-dates', { method: 'POST', json: { from: from.value, to: to.value } }));
+            clear(out).appendChild(resultBox(res, {}));
+            const d = unwrap(res.data);
+            if (res.ok && d && d.blockId) { setCtx('block_id', d.blockId); store.set('pl-blocks', blocks().concat([{ listingId: idIn.value, from: from.value, to: to.value, blockId: d.blockId }])); drawBlocks(); if (cal) cal.reload(); }
+          } }, 'Block these dates'),
+          blocksEl)),
+      out),
+    accordion(['GET /listings/{listing_id}/availability', 'POST /listings/{listing_id}/blocked-dates', 'DELETE /listings/{listing_id}/blocked-dates/{block_id}'], false));
+}
+
+function screenHost(root) {
+  root.appendChild(pageHead('Host tools', 'Everything an owner does: publish, edit, manage photos and dates, promote, and read bookings and leads. Sign in as the Home owner persona.'));
+  const rowActions = (l) => [
+    h('button', { class: 'btn sm', onclick: () => { setCtx('listing_id', idOf(l)); go('host', 'form'); } }, 'Edit'),
+    h('button', { class: 'btn sm', onclick: () => { setCtx('listing_id', idOf(l)); go('host', 'images'); } }, 'Images'),
+    h('button', { class: 'btn sm', onclick: () => { setCtx('listing_id', idOf(l)); go('host', 'dates'); } }, 'Dates'),
+    h('button', { class: 'btn sm', onclick: () => { setCtx('listing_id', idOf(l)); go('host', 'promo'); } }, 'Promote'),
+    h('button', { class: 'btn sm', onclick: async (e) => { const r = await withBusy(e.currentTarget, () => api('listing', '/listings/' + idOf(l) + (l.archived ? '/unarchive' : '/archive'), { method: 'POST' })); toast(r.ok ? 'Done' : errText(r), r.ok ? 'ok' : 'bad'); if (r.ok) go('host', 'listings'); } }, l.archived ? 'Unarchive' : 'Archive'),
+    h('button', { class: 'btn sm danger', onclick: async (e) => { if (!await confirmBox('Delete listing', 'Delete ' + (l.title || idOf(l)) + '?', true, 'Delete')) return; const r = await withBusy(e.currentTarget, () => api('listing', '/listings/' + idOf(l), { method: 'DELETE' })); toast(r.ok ? 'Deleted' : errText(r), r.ok ? 'ok' : 'bad'); if (r.ok) go('host', 'listings'); } }, 'Delete')
+  ];
+  tabbed(root, 'host', [
+    { id: 'listings', label: 'My listings', render: (p) => { const c = livePanel('GET /listings/me', { hooks: { listingActions: rowActions } }); EP['GET /listings/me'].hooks = { listingActions: rowActions }; p.append(c); } },
+    { id: 'form', label: 'Create or edit', render: (p) => { const pre = S.formEdit ? S.ctx.listing_id : ''; S.formEdit = false; p.append(listingForm(pre), h('h4', null, 'Raw endpoints'), accordion(['POST /listings', 'PUT /listings/{listing_id}', 'POST /listings/{listing_id}/archive', 'POST /listings/{listing_id}/unarchive', 'DELETE /listings/{listing_id}'], false)); } },
+    { id: 'images', label: 'Images', render: (p) => { p.append(imageManager(), h('h4', null, 'Raw endpoints'), accordion(['POST /listings/{listing_id}/images', 'DELETE /listings/{listing_id}/images/{file_id}', 'PUT /listings/{listing_id}/images/cover', 'PUT /listings/{listing_id}/images/order', 'GET /images/{file_id}', 'POST /listings/upload-images'], false)); } },
+    { id: 'dates', label: 'Availability', render: (p) => p.append(datesPanel()) },
+    { id: 'promo', label: 'Promotions', render: (p) => { p.append(accordion(['POST /listings/promote', 'POST /listings/{listing_id}/extend'], true), livePanel('GET /listings/promotions/my')); } },
+    { id: 'received', label: 'Bookings received', render: (p) => p.append(livePanel('GET /bookings/received')) },
+    { id: 'leads', label: 'Leads', render: (p) => p.append(livePanel('GET /interests/received')) },
+    { id: 'public', label: 'By owner', render: (p) => p.append(accordion(['GET /listings/owner/{owner_id}', 'GET /listings/{listing_id}', 'GET /listings/short-term', 'GET /listings/search'], true)) }
+  ]);
+}
+
+/* ====================== community ====================== */
+function screenCommunity(root) {
+  root.appendChild(pageHead('Community', 'Profiles, views, follows, likes and reviews. Set a user id in the bar above (or click Use id on a profile) and every card fills itself in.'));
+  tabbed(root, 'community', [
+    { id: 'profiles', label: 'Profiles', render: (p) => { p.append(livePanel('GET /social/profile/me'), accordion(['GET /social/profile/user/{user_id}', 'GET /social/profile/search', 'GET /social/profile/all'], false)); } },
+    { id: 'views', label: 'Profile views', render: (p) => p.append(accordion(['POST /social/views/{user_id}', 'GET /social/views/who-viewed-me', 'GET /social/views/who-i-viewed', 'GET /social/views/stats', 'GET /social/views/stats/{user_id}'], true)) },
+    { id: 'follow', label: 'Follow and like', render: (p) => p.append(accordion(['POST /social/follow', 'DELETE /social/unfollow/{user_id}', 'POST /social/like', 'DELETE /social/unlike/{user_id}', 'GET /social/my-likes', 'GET /social/my-following'], true)) },
+    { id: 'reviews', label: 'Reviews', render: (p) => p.append(accordion(['POST /social/review', 'PUT /social/review', 'DELETE /social/review/{review_id}', 'GET /social/reviews/{user_id}', 'GET /social/stats/{user_id}'], true)) }
+  ]);
+}
+
+/* ====================== admin ====================== */
+function adminModeration() {
+  const f = { status: sel(['', 'PENDING', 'ACTIVE', 'REJECTED'], ''), deleted: sel(['', 'true', 'false'], ''), archived: sel(['', 'true', 'false'], ''), size: h('input', { type: 'number', value: 20 }), page: h('input', { type: 'number', value: 0 }) };
+  const out = h('div');
+  const act = async (btn, l, verb, method, suffix, danger) => {
+    if (danger && !await confirmBox(verb + ' listing', (l.title || idOf(l)) + ' will be changed.', true, verb)) return;
+    const res = await withBusy(btn, () => api('listing', '/admin/listings/' + encodeURIComponent(idOf(l)) + suffix, { method }));
+    toast(res.ok ? verb + ' done' : errText(res), res.ok ? 'ok' : 'bad');
+    if (res.ok) run();
+  };
+  async function run(btn) {
+    const res = await withBusy(btn, () => api('listing', '/admin/listings', { query: { status: f.status.value, deleted: f.deleted.value, archived: f.archived.value, page: f.page.value, size: f.size.value, sort: 'createdAt,desc' } }));
+    clear(out);
+    if (!res.ok) { out.append(h('div', { class: 'notice bad' }, errText(res)), resultBox(res, {})); return; }
+    const list = asList(res.data) || [];
+    const info = pageInfo(res.data);
+    out.append(h('div', { class: 'row', style: { marginBottom: '8px' } }, h('b', null, list.length + ' listing(s)'), info ? h('span', { class: 'muted tiny' }, 'page ' + (info.page + 1) + ' of ' + info.pages + ', ' + info.total + ' total') : null,
+      h('button', { class: 'btn sm', onclick: () => { f.page.value = Math.max(0, Number(f.page.value) - 1); run(); } }, 'Prev'),
+      h('button', { class: 'btn sm', onclick: () => { f.page.value = Number(f.page.value) + 1; run(); } }, 'Next')));
+    if (!list.length) { out.appendChild(h('div', { class: 'empty' }, 'No listings match.')); return; }
+    out.appendChild(h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+      h('thead', null, h('tr', null, ['Listing', 'Status', 'Flags', 'Owner', 'Actions'].map((t) => h('th', null, t)))),
+      h('tbody', null, list.map((l) => h('tr', null,
+        h('td', null, h('b', null, l.title || '(untitled)'), h('div', { class: 'idline', onclick: () => { setCtx('listing_id', idOf(l)); copy(idOf(l), 'Listing id'); } }, idOf(l)), h('div', { class: 'muted tiny' }, [l.category ? pretty(l.category) : '', l.city].filter(Boolean).join(', '))),
+        h('td', null, statusChip(l.status)),
+        h('td', null, l.archived ? h('span', { class: 'chip' }, 'archived') : null, ' ', l.deleted ? h('span', { class: 'chip bad' }, 'deleted') : null),
+        h('td', { class: 'mono tiny' }, l.ownerId || ''),
+        h('td', null, h('div', { class: 'row gap-s' },
+          h('button', { class: 'btn sm primary', onclick: (e) => act(e.currentTarget, l, 'Approve', 'PUT', '/approve') }, 'Approve'),
+          h('button', { class: 'btn sm', onclick: (e) => act(e.currentTarget, l, 'Reject', 'PUT', '/reject') }, 'Reject'),
+          h('button', { class: 'btn sm', onclick: (e) => act(e.currentTarget, l, l.archived ? 'Unarchive' : 'Archive', 'PUT', l.archived ? '/unarchive' : '/archive') }, l.archived ? 'Unarchive' : 'Archive'),
+          l.deleted ? h('button', { class: 'btn sm', onclick: (e) => act(e.currentTarget, l, 'Restore', 'PUT', '/restore') }, 'Restore')
+            : h('button', { class: 'btn sm danger', onclick: (e) => act(e.currentTarget, l, 'Soft delete', 'DELETE', '', true) }, 'Soft delete'),
+          h('button', { class: 'btn sm danger fill', onclick: (e) => act(e.currentTarget, l, 'Hard delete', 'DELETE', '/hard-delete', true) }, 'Hard delete'),
+          h('button', { class: 'btn sm', onclick: () => openListing(idOf(l)) }, 'Open')))))))));
+  }
+  return h('div', { class: 'col' },
+    h('div', { class: 'card' }, h('div', { class: 'card-h' }, h('h3', null, 'Listing moderation'), h('span', { class: 'chip warn' }, ADMIN_ROLES)),
+      h('div', { class: 'grid g4' }, field('status', f.status), field('deleted', f.deleted), field('archived', f.archived), field('size', f.size)),
+      h('div', { class: 'row', style: { marginTop: '10px' } }, h('button', { class: 'btn primary', onclick: (e) => { f.page.value = 0; run(e.currentTarget); } }, 'Load listings'), h('span', { class: 'muted tiny' }, 'Needs the Admin or Finance persona.'))),
+    out);
+}
+const ADMIN_ROLES = 'Admin or Finance';
+
+function screenAdmin(root) {
+  root.appendChild(pageHead('Admin console', 'Moderate listings and resolve bookings that need a human. Sign in as the Admin persona.'));
+  tabbed(root, 'admin', [
+    { id: 'moderation', label: 'Moderation', render: (p) => p.append(adminModeration()) },
+    { id: 'bookings', label: 'Bookings needing review', render: (p) => {
+      p.append(h('div', { class: 'notice' }, 'NEEDS_REVIEW bookings are payments or payouts the service could not settle on its own. Retry payout re-queues a failed release. Mark paid or unpaid settles an unconfirmed tenant payment by hand.'),
+        livePanel('GET /admin/bookings/needs-review'), accordion(['POST /admin/bookings/{booking_id}/retry-payout', 'POST /admin/bookings/{booking_id}/resolve-payment'], false)); } },
+    { id: 'api', label: 'Listing endpoints', render: (p) => p.append(accordion(['GET /admin/listings', 'GET /admin/listings/{listing_id}', 'PUT /admin/listings/{listing_id}/approve', 'PUT /admin/listings/{listing_id}/reject', 'PUT /admin/listings/{listing_id}/archive', 'PUT /admin/listings/{listing_id}/unarchive', 'DELETE /admin/listings/{listing_id}', 'PUT /admin/listings/{listing_id}/restore', 'DELETE /admin/listings/{listing_id}/hard-delete'], true)) }
+  ]);
+}
+
+/* ====================== wallet ====================== */
+function escrowTracker(initialRef) {
+  const ref = h('input', { type: 'text', value: initialRef || S.ctx.escrow_hold_reference || (S.ctx.booking_id ? 'booking-' + S.ctx.booking_id : ''), placeholder: 'booking-<booking id>' });
+  bus.addEventListener('ctx', (e) => { if (e.detail.key === 'escrow_hold_reference') ref.value = e.detail.val; });
+  const out = h('div');
+  const lookup = async (btn) => {
+    if (!ref.value) { toast('Enter a hold reference', 'bad'); return; }
+    setCtx('escrow_hold_reference', ref.value);
+    const res = await withBusy(btn, () => api('wallet', '/internal/escrow/' + encodeURIComponent(ref.value), { anon: true, apiKey: S.cfg.apiKey }));
+    clear(out);
+    if (!res.ok) { out.append(h('div', { class: 'notice bad' }, errText(res)), resultBox(res, {})); return; }
+    const d = unwrap(res.data) || {};
+    const payouts = d.payouts || [];
+    const amt = (v) => (v === undefined || v === null ? '-' : fmtMoney(v));
+    out.append(
+      h('div', { class: 'card flat' },
+        h('div', { class: 'card-h' }, h('h3', null, d.reference || ref.value), statusChip(d.status)),
+        d.failureReason ? h('div', { class: 'notice bad', style: { marginBottom: '8px' } }, d.failureReason) : null,
+        h('dl', { class: 'kv' }, h('dt', null, 'Held amount'), h('dd', null, amt(d.amount)), h('dt', null, 'Commission'), h('dd', null, amt(d.commission)), h('dt', null, 'Total debited'), h('dd', null, amt(d.totalDebited)),
+          h('dt', null, 'Remaining'), h('dd', null, amt(d.remainingAmount)), h('dt', null, 'Sender'), h('dd', null, d.senderUserId || '-'), h('dt', null, 'Beneficiary'), h('dd', null, d.beneficiaryEmail || '-'))),
+      h('h4', { style: { margin: '12px 0 6px' } }, 'Payouts (' + payouts.length + ')'),
+      payouts.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', null, h('tr', null, ['Reference', 'Status', 'Amount', 'Recipient', 'Failure'].map((t) => h('th', null, t)))),
+        h('tbody', null, payouts.map((p) => h('tr', null, h('td', { class: 'mono tiny' }, p.reference), h('td', null, statusChip(p.status)), h('td', null, amt(p.amount)), h('td', null, p.recipientAccountNumber || p.recipient || ''), h('td', null, p.failureReason || '')))))) : h('div', { class: 'empty' }, 'No payouts yet.'),
+      h('div', { style: { marginTop: '10px' } }, h('details', null, h('summary', { class: 'muted tiny', style: { cursor: 'pointer' } }, 'Raw response'), jsonView(res.data))));
+  };
+  const box = h('div', { class: 'col' },
+    h('div', { class: 'notice' }, 'The listing service writes these references: booking-ID (hold), booking-release-ID (owner payout after check-in), booking-refund-ID (refund to tenant), booking-payout-ID (owner share after a late cancel). Needs the internal API key in Settings.'),
+    h('div', { class: 'row' }, h('div', { style: { flex: 1, minWidth: '260px' } }, ref), h('button', { class: 'btn primary', onclick: (e) => lookup(e.currentTarget) }, 'Look up hold'),
+      h('button', { class: 'btn', onclick: () => { ref.value = 'booking-' + S.ctx.booking_id; lookup(); } }, 'Use working booking')),
+    out);
+  if (ref.value) setTimeout(() => lookup(), 0);
+  return box;
+}
+function openEscrowTracker(reference) { openDrawer('Escrow hold', (body) => body.appendChild(escrowTracker(reference))); }
+
+function screenWallet(root) {
+  root.appendChild(pageHead('Wallet and escrow', 'The wallet-service side of a booking. Balance and statement use the active persona. Escrow calls use the internal API key from Settings.'));
+  tabbed(root, 'wallet', [
+    { id: 'account', label: 'Account', render: (p) => { p.append(livePanel('GET /wallet/balance'), accordion(['POST /wallet/create', 'POST /wallet/statement'], false)); } },
+    { id: 'tracker', label: 'Escrow tracker', render: (p) => p.append(h('div', { class: 'card' }, escrowTracker())) },
+    { id: 'manual', label: 'Hold and payout (manual)', render: (p) => { p.append(h('div', { class: 'notice warn' }, 'These move real wallet money in whatever environment you point at. Use test users.'), accordion(['POST /internal/escrow/hold', 'POST /internal/escrow/{escrow_hold_reference}/payouts', 'GET /internal/escrow/{escrow_hold_reference}'], true)); } }
+  ]);
+}
+
+/* ====================== utilities ====================== */
+async function loadRates(quiet) {
+  const res = await api('listing', '/currency/rates', { anon: true });
+  if (!res.ok) { if (!quiet) toast('Rates: ' + errText(res), 'bad'); return false; }
+  let d = unwrap(res.data);
+  if (d && d.rates && typeof d.rates === 'object') d = d.rates;
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    S.rates = {}; Object.keys(d).forEach((k) => { if (typeof d[k] === 'number') S.rates[k] = d[k]; });
+    if (!('USD' in S.rates)) S.rates.USD = 1;
+    emit('rates');
+    return true;
+  }
+  return false;
+}
+
+function converter() {
+  const amt = h('input', { type: 'number', value: 100 });
+  const to = h('input', { type: 'text', value: 'KES' });
+  const out = h('div');
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-h' }, h('h3', null, 'Quick converter'), h('span', { class: 'tag' }, '/currency/convert')),
+    h('div', { class: 'row' }, field('Amount (USD)', amt), field('To', to), h('button', { class: 'btn primary', style: { alignSelf: 'flex-end' }, onclick: async (e) => {
+      const res = await withBusy(e.currentTarget, () => api('listing', '/currency/convert', { query: { amount: amt.value, to: to.value }, anon: true }));
+      clear(out).appendChild(resultBox(res, {}));
+    } }, 'Convert')), out);
+}
+
+function screenTools(root) {
+  root.appendChild(pageHead('Currency and system', 'Exchange rates drive the price display switch in the top bar. Health shows whether the service and its dependencies are up.'));
+  tabbed(root, 'tools', [
+    { id: 'currency', label: 'Currency', render: (p) => p.append(converter(), h('div', { class: 'row' }, h('button', { class: 'btn', onclick: async (e) => { const ok = await withBusy(e.currentTarget, () => loadRates()); toast(ok ? 'Rates loaded for price display' : 'Could not read rates', ok ? 'ok' : 'bad'); } }, 'Load rates for the price display')), accordion(['GET /currency/rates', 'GET /currency/rate', 'GET /currency/convert', 'GET /currency/supported'], false)) },
+    { id: 'health', label: 'Health', render: (p) => { const so = h('div'); p.append(livePanel('GET /system/health', {}), accordion(['GET /system/health/details', 'GET /system/test-token'], true),
+      h('div', { class: 'card' }, h('div', { class: 'card-h' }, h('h3', null, 'Smoke test'), h('span', { class: 'muted tiny' }, 'Calls every GET endpoint with its default filters and the working ids')),
+        h('button', { class: 'btn primary', onclick: (e) => withBusy(e.currentTarget, () => smokeTest(so)) }, 'Run smoke test'), h('div', { style: { height: '10px' } }), so)); } }
+  ]);
+}
+
+/* ====================== router and shell ====================== */
+const SCREENS = [
+  { id: 'guide', label: 'Guide', icon: 'compass', group: '', fn: () => screenGuide },
+  { id: 'discover', label: 'Discover', icon: 'search', group: 'Marketplace', fn: () => screenDiscover },
+  { id: 'trips', label: 'Trips', icon: 'trips', group: 'Marketplace', fn: () => screenTrips },
+  { id: 'host', label: 'Host', icon: 'host', group: 'Owner', fn: () => screenHost },
+  { id: 'community', label: 'Community', icon: 'users', group: 'People', fn: () => screenCommunity },
+  { id: 'admin', label: 'Admin', icon: 'shield', group: 'Operations', fn: () => screenAdmin },
+  { id: 'wallet', label: 'Wallet', icon: 'wallet', group: 'Operations', fn: () => screenWallet },
+  { id: 'tools', label: 'Tools', icon: 'tools', group: 'Developer', fn: () => screenTools },
+  { id: 'explorer', label: 'API explorer', icon: 'code', group: 'Developer', fn: () => screenExplorer }
+];
+
+function go(screen, tab) {
+  if (tab === 'edit') { tab = 'form'; S.formEdit = true; }
+  S.tabs = S.tabs || {};
+  if (tab) S.tabs[screen] = tab;
+  S.screen = screen;
+  store.set('pl-screen', screen);
+  const sh = $('.shell'); if (sh) sh.classList.remove('menu-open');
+  renderMain();
+}
+
+function renderMain() {
+  const main = $('#main');
+  clear(main);
+  $$('.nav button').forEach((b) => b.classList.toggle('on', b.dataset.id === S.screen));
+  const s = SCREENS.find((x) => x.id === S.screen) || SCREENS[1];
+  const t = $('#screen-title'); if (t) t.textContent = s.label;
+  try { s.fn()(main); } catch (e) { main.appendChild(h('div', { class: 'notice bad' }, 'Screen failed to draw: ' + e.message)); console.error(e); }
+  window.scrollTo(0, 0);
+}
+
+function applyTheme() {
+  const t = store.get('pl-theme', 'auto');
+  const dark = t === 'dark' || (t === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+}
+
+function personaLabel(id) { return (PERSONAS.find((p) => p.id === id) || {}).label || id; }
+
+function buildShell() {
+  const app = $('#app');
+  const nav = h('div', { class: 'nav' });
+  let lastGroup = null;
+  SCREENS.forEach((s) => {
+    if (s.group !== lastGroup && s.group) nav.appendChild(h('div', { class: 'nav-title' }, s.group));
+    lastGroup = s.group;
+    nav.appendChild(h('button', { 'data-id': s.id, onclick: () => go(s.id) }, icon(s.icon, 16), s.label));
+  });
+  const personaSel = h('select', { id: 'persona-sel', 'aria-label': 'Active persona', onchange: (e) => { S.active = e.target.value; store.set('pl-active', S.active); refreshWho(); renderMain(); } });
+  const curSel = h('select', { id: 'cur-sel', title: 'Currency used to display prices', 'aria-label': 'Display currency', style: { width: '84px' }, onchange: async (e) => {
+    S.currency = e.target.value; store.set('pl-currency', S.currency);
+    if (S.currency !== 'USD' && !S.rates) await loadRates();
+    renderMain();
+  } });
+  const mark = h('div', { class: 'brand-mark' });
+  mark.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12L12 5l8.5 7"/><path d="M7 10.5V19h10v-8.5"/></svg>';
+  const side = h('aside', { class: 'side' },
+    h('div', { class: 'brand' }, mark, h('div', null, h('b', null, 'Premisave'), h('small', null, 'Listing console'))),
+    nav,
+    h('div', { class: 'side-foot' },
+      h('div', { class: 'who-box' }, h('div', { class: 'avatar', id: 'who-av' }, 'T'), h('div', { class: 'grow' }, h('small', null, 'Acting as'), personaSel)),
+      h('button', { class: 'foot-btn', onclick: openAccount }, icon('user', 16), 'Account'),
+      h('button', { class: 'foot-btn', onclick: openSettings }, icon('gear', 16), 'Settings'),
+      h('button', { class: 'foot-btn', title: 'Switch between light and dark', onclick: () => { const cur = document.documentElement.getAttribute('data-theme'); store.set('pl-theme', cur === 'dark' ? 'light' : 'dark'); applyTheme(); } }, icon('moon', 16), 'Theme'),
+      h('button', { class: 'svc', id: 'health', title: 'Check the three services', onclick: pingAll }, h('span', { class: 'dot' }), 'Services')));
+  const content = h('div', { class: 'content' },
+    h('header', { class: 'topline' },
+      h('button', { class: 'btn sm menu-btn', 'aria-label': 'Open menu', onclick: () => $('.shell').classList.add('menu-open') }, icon('menu', 16)),
+      h('h1', { id: 'screen-title' }, ''),
+      h('button', { class: 'btn sm', style: { flex: 'none' }, onclick: openIds }, icon('plus', 12), 'Working ids'),
+      h('div', { class: 'ctx-tags', id: 'ctxbar' }),
+      h('div', { class: 'grow' }), curSel),
+    h('main', { id: 'main' }));
+  const shell = h('div', { class: 'shell' }, side, content);
+  shell.addEventListener('click', (e) => { if (e.target === shell) shell.classList.remove('menu-open'); });
+  app.appendChild(shell);
+  drawCtxBar(); fillCurrencies(); refreshWho();
+}
+
+function fillCurrencies() {
+  const el = $('#cur-sel'); if (!el) return;
+  const codes = S.rates ? Object.keys(S.rates).sort() : ['USD', 'KES', 'EUR', 'GBP'];
+  if (!codes.includes(S.currency)) codes.push(S.currency);
+  clear(el); codes.forEach((c) => el.appendChild(h('option', { value: c, selected: c === S.currency }, c)));
+}
+bus.addEventListener('rates', fillCurrencies);
+
+function refreshWho() {
+  const el = $('#persona-sel'); if (!el) return;
+  clear(el);
+  PERSONAS.forEach((p) => el.appendChild(h('option', { value: p.id, selected: p.id === S.active }, p.label + (S.personas[p.id].token ? ' (signed in)' : ''))));
+  const av = $('#who-av'); if (av) av.textContent = personaLabel(S.active).slice(0, 1);
+}
+
+const ctxLabel = (k) => k === 'escrow_hold_reference' ? 'escrow reference' : k.replace(/_/g, ' ');
+function drawCtxBar() {
+  const bar = $('#ctxbar'); if (!bar) return;
+  clear(bar);
+  CTX_KEYS.filter((k) => S.ctx[k]).forEach((k) => bar.appendChild(h('span', { class: 'ctx-tag', title: 'Copy ' + ctxLabel(k), onclick: () => copy(S.ctx[k], ctxLabel(k)) },
+    h('b', null, ctxLabel(k)), h('span', null, S.ctx[k]),
+    h('button', { class: 'ctx-x', title: 'Clear', 'aria-label': 'Clear ' + ctxLabel(k), onclick: (e) => { e.stopPropagation(); setCtx(k, ''); } }, icon('x', 12)))));
+}
+bus.addEventListener('ctx', drawCtxBar);
+
+function openIds() {
+  modal((box, close) => {
+    const inputs = {};
+    box.append(h('h3', null, 'Working ids'), h('p', { class: 'muted', style: { margin: '4px 0 14px' } }, 'Endpoint forms fill these in for you, and creating something sets the matching id.'));
+    const grid = h('div', { class: 'grid g2' });
+    CTX_KEYS.forEach((k) => { inputs[k] = h('input', { type: 'text', value: S.ctx[k], placeholder: 'none' }); grid.appendChild(field(k, inputs[k])); });
+    box.append(grid);
+    const m = me();
+    if (m.userId) box.append(h('div', { class: 'row', style: { margin: '14px 0 0' } }, h('span', { class: 'muted' }, 'Signed in as user'), h('span', { class: 'mono' }, m.userId), h('button', { class: 'btn sm', onclick: () => { inputs.user_id.value = m.userId; } }, 'Use as user id')));
+    box.append(h('div', { class: 'row', style: { justifyContent: 'space-between', marginTop: '18px' } },
+      h('button', { class: 'btn', onclick: () => { CTX_KEYS.forEach((k) => { inputs[k].value = ''; }); } }, 'Clear all'),
+      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: close }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => { CTX_KEYS.forEach((k) => setCtx(k, inputs[k].value.trim())); close(); } }, 'Save'))));
+  });
+}
+
+async function pingAll() {
+  const el = $('#health'); const dot = $('.dot', el);
+  const checks = [['listing', '/system/health'], ['auth', '/actuator/health'], ['wallet', '/actuator/health']];
+  const out = [];
+  for (const [svc, path] of checks) {
+    const r = await api(svc, path, { anon: true });
+    out.push({ svc, ok: r.status > 0 && r.status < 500, status: r.status });
+  }
+  S.health = out;
+  dot.className = 'dot ' + (out.every((o) => o.ok) ? 'ok' : out.some((o) => o.ok) ? '' : 'bad');
+  el.title = out.map((o) => o.svc + ': ' + (o.status || 'unreachable')).join('   ');
+  emit('health');
+  return out;
+}
+
+/* ====================== account ====================== */
+function openAccount() {
+  modal((box, close) => {
+    let pid = S.active;
+    const body = h('div', { class: 'col' });
+    const draw = () => {
+      clear(body);
+      const p = S.personas[pid];
+      const claims = p.token ? decodeJwt(p.token) : {};
+      const email = h('input', { type: 'text', value: p.email, placeholder: 'email' });
+      const pass = h('input', { type: 'password', value: p.password, placeholder: 'password' });
+      const tok = h('textarea', { placeholder: 'Paste an access token to use it directly', style: { minHeight: '64px' } }, p.token || '');
+      const persist = () => { p.email = email.value.trim(); p.password = pass.value; savePersonas(); };
+      body.append(
+        h('div', { class: 'pill-tabs' }, PERSONAS.map((x) => h('button', { class: x.id === pid ? 'on' : '', onclick: () => { pid = x.id; draw(); } }, x.label))),
+        h('div', { class: 'muted tiny' }, 'Postman variables: ' + (PERSONAS.find((x) => x.id === pid) || {}).hint + '. Credentials stay in this browser only.'),
+        field('Email', email), field('Password', pass),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn primary', onclick: async (e) => {
+            persist();
+            const res = await withBusy(e.currentTarget, () => api('auth', '/auth/signin', { method: 'POST', json: { email: p.email, password: p.password }, anon: true }));
+            const d = res.data || {};
+            if (res.ok && d.token) { saveToken(p, d); S.active = pid; store.set('pl-active', pid); toast('Signed in as ' + personaLabel(pid), 'ok'); refreshWho(); draw(); renderMain(); }
+            else toast('Sign in failed: ' + errText(res), 'bad');
+          } }, 'Sign in'),
+          h('button', { class: 'btn', onclick: async (e) => {
+            if (!p.refresh) { toast('No refresh token stored', 'bad'); return; }
+            const res = await withBusy(e.currentTarget, () => api('auth', '/auth/refresh', { method: 'POST', json: { refreshToken: p.refresh }, anon: true }));
+            const d = res.data || {};
+            if (res.ok && d.token) { saveToken(p, d); toast('Token refreshed', 'ok'); refreshWho(); draw(); } else toast('Refresh failed: ' + errText(res), 'bad');
+          } }, 'Refresh token'),
+          h('button', { class: 'btn danger', onclick: async (e) => {
+            if (p.token) await withBusy(e.currentTarget, () => api('auth', '/auth/logout', { method: 'POST', token: p.token }));
+            p.token = ''; p.refresh = ''; p.userId = ''; p.role = ''; savePersonas(); toast('Signed out'); refreshWho(); draw();
+          } }, 'Sign out')),
+        h('div', { class: 'hr' }),
+        field('Access token', tok),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn', onclick: () => { p.token = tok.value.trim(); const c = decodeJwt(p.token); p.userId = c.userId || c.sub || ''; p.role = c.role || (c.roles && c.roles[0]) || p.role; savePersonas(); refreshWho(); draw(); toast('Token saved'); } }, 'Use pasted token'),
+          p.token ? h('button', { class: 'btn', onclick: () => copy(p.token, 'Token') }, 'Copy token') : null),
+        p.token ? h('dl', { class: 'kv' }, h('dt', null, 'User id'), h('dd', null, p.userId || '-'), h('dt', null, 'Role'), h('dd', null, p.role || claims.role || '-'),
+          h('dt', null, 'Expires'), h('dd', null, claims.exp ? new Date(claims.exp * 1000).toLocaleString() + (claims.exp * 1000 < Date.now() ? '  (expired)' : '') : '-')) : h('div', { class: 'notice warn' }, 'Not signed in as ' + personaLabel(pid) + '.'),
+        h('div', { class: 'hr' }),
+        h('details', null, h('summary', { style: { cursor: 'pointer', fontWeight: 700 } }, 'Create an account'), signUpForm()),
+        h('div', { class: 'row', style: { justifyContent: 'flex-end' } }, h('button', { class: 'btn', onclick: close }, 'Done')));
+    };
+    draw();
+    box.appendChild(body);
+  });
+}
+
+function saveToken(p, d) {
+  p.token = d.token; p.refresh = d.refreshToken || p.refresh;
+  const c = decodeJwt(d.token);
+  p.userId = c.userId || c.sub || p.userId; p.role = d.role || c.role || p.role;
+  savePersonas();
+}
+
+function signUpForm() {
+  const f = {};
+  const defs = [['username', 'john_doe'], ['firstName', 'John'], ['middleName', 'Kipchoge'], ['lastName', 'Doe'], ['email', ''], ['phoneNumber', '+254712345678'], ['address1', '123 Ngong Road'], ['address2', 'Apartment 12'], ['country', 'Kenya'], ['language', 'ENGLISH'], ['password', '']];
+  const grid = h('div', { class: 'grid g2', style: { marginTop: '10px' } });
+  defs.forEach(([n, v]) => { f[n] = h('input', { type: n === 'password' ? 'password' : 'text', value: v }); grid.appendChild(field(n, f[n])); });
+  const vt = h('input', { type: 'text', placeholder: 'verification token from the email' });
+  const out = h('div');
+  return h('div', null, grid,
+    h('div', { class: 'row', style: { marginTop: '10px' } },
+      h('button', { class: 'btn primary', onclick: async (e) => { const body = {}; Object.keys(f).forEach((k) => { body[k] = f[k].value; }); const res = await withBusy(e.currentTarget, () => api('auth', '/auth/signup', { method: 'POST', json: body, anon: true })); clear(out).appendChild(resultBox(res, {})); } }, 'Sign up'),
+      h('button', { class: 'btn', onclick: async (e) => { const res = await withBusy(e.currentTarget, () => api('auth', '/auth/resend-activation', { method: 'POST', query: { email: f.email.value }, anon: true })); clear(out).appendChild(resultBox(res, {})); } }, 'Resend activation')),
+    h('div', { class: 'row', style: { marginTop: '10px' } }, h('div', { style: { flex: 1 } }, vt),
+      h('button', { class: 'btn', onclick: async (e) => { const res = await withBusy(e.currentTarget, () => api('auth', '/auth/verify/' + encodeURIComponent(vt.value), { anon: true })); clear(out).appendChild(resultBox(res, {})); } }, 'Verify email')), out);
+}
+
+/* ====================== settings ====================== */
+function openSettings() {
+  modal((box, close) => {
+    const f = {
+      listing: h('input', { type: 'text', value: S.cfg.listing }), auth: h('input', { type: 'text', value: S.cfg.auth }), wallet: h('input', { type: 'text', value: S.cfg.wallet }),
+      apiKey: h('input', { type: 'password', value: S.cfg.apiKey, placeholder: 'INTERNAL_SERVICE_API_KEY' }), timeout: h('input', { type: 'number', value: S.cfg.timeout })
+    };
+    const theme = sel(['auto', 'light', 'dark'], store.get('pl-theme', 'auto'));
+    box.append(h('h3', null, 'Settings'),
+      h('div', { class: 'col', style: { margin: '12px 0' } },
+        field('Listing service URL', f.listing), field('Auth service URL', f.auth), field('Wallet service URL', f.wallet),
+        field('Internal API key', f.apiKey, '(only for the escrow lookups, sent as X-API-Key)'), field('Request timeout (seconds)', f.timeout), field('Theme', theme),
+        h('div', { class: 'notice' }, 'This page runs from ' + location.origin + '. If requests fail with a network error, add that origin to CORS_ALLOWED_ORIGINS on each service. A file opened from disk shows the origin as null; serve it instead, for example with: python3 -m http.server 3000')),
+      h('div', { class: 'row', style: { justifyContent: 'space-between' } },
+        h('button', { class: 'btn danger', onclick: async () => { if (await confirmBox('Reset', 'Clear every saved setting, token and working id from this browser?', true, 'Reset')) { try { localStorage.clear(); } catch (e) { /* ignore */ } location.reload(); } } }, 'Reset all'),
+        h('div', { class: 'row' }, h('button', { class: 'btn', onclick: close }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => {
+          ['listing', 'auth', 'wallet'].forEach((k) => { S.cfg[k] = f[k].value.trim().replace(/\/+$/, ''); });
+          S.cfg.apiKey = f.apiKey.value; S.cfg.timeout = Number(f.timeout.value) || 60; saveCfg();
+          store.set('pl-theme', theme.value); applyTheme(); close(); toast('Settings saved', 'ok'); pingAll();
+        } }, 'Save'))));
+  });
+}
+
+/* ====================== request inspector ====================== */
+function buildDock() {
+  const bar = h('div', { class: 'dock-bar', onclick: () => dock.classList.toggle('open') },
+    h('b', null, 'Requests'), h('span', { class: 'chip', id: 'log-count' }, '0'), h('span', { class: 'path grow', id: 'log-last' }, 'Nothing sent yet'),
+    h('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); S.log.length = 0; S.sel = null; drawLog(); } }, 'Clear'),
+    h('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); copy(JSON.stringify(S.log, null, 2), 'Log'); } }, 'Copy log'));
+  const list = h('div', { class: 'logl', id: 'logl' });
+  const det = h('div', { class: 'logd', id: 'logd' }, h('div', { class: 'muted' }, 'Select a request.'));
+  const dock = h('div', { class: 'dock' }, bar, h('div', { class: 'dock-body' }, list, det));
+  document.body.appendChild(dock);
+  bus.addEventListener('log', drawLog);
+}
+function drawLog() {
+  const list = $('#logl'); if (!list) return;
+  clear(list);
+  $('#log-count').textContent = S.log.length;
+  const last = S.log[0];
+  $('#log-last').textContent = last ? last.method + ' ' + last.url + '  ' + (last.status || 'ERR') + '  ' + last.ms + 'ms' : 'Nothing sent yet';
+  S.log.slice(0, 80).forEach((e) => list.appendChild(h('div', { class: 'logr' + (S.sel === e.id ? ' on' : ''), onclick: () => { S.sel = e.id; drawLog(); showLog(e); } },
+    h('span', { class: 'stat ' + (e.status >= 500 || !e.status ? 's5' : e.status >= 400 ? 's4' : e.status >= 300 ? 's3' : 's2') }, e.status || 'ERR'),
+    h('span', { class: 'method m-' + e.method }, e.method), h('span', { class: 'path grow' }, e.url.replace(/^https?:\/\/[^/]+/, '')), h('span', { class: 'muted tiny' }, e.ms + 'ms'))));
+  if (!S.sel && last) showLog(last);
+}
+function showLog(e) {
+  const d = $('#logd'); clear(d);
+  d.append(...[
+    h('div', { class: 'row' }, h('span', { class: 'method m-' + e.method }, e.method), h('span', { class: 'path grow' }, e.url), h('span', { class: 'muted tiny' }, e.t.toLocaleTimeString()),
+      h('button', { class: 'btn sm', onclick: () => copy(curlOf(e.method, e.url, e.reqHeaders, typeof e.reqBody === 'string' ? e.reqBody : JSON.stringify(e.reqBody)), 'cURL') }, 'Copy cURL')),
+    h('h4', { style: { margin: '10px 0 4px' } }, 'Request headers'), jsonView(e.reqHeaders),
+    e.reqBody ? [h('h4', { style: { margin: '10px 0 4px' } }, 'Request body'), jsonView(e.reqBody)] : null,
+    h('h4', { style: { margin: '10px 0 4px' } }, 'Response ' + (e.status || 'ERR')), jsonView(e.resBody === undefined ? null : e.resBody)].flat().filter(Boolean));
+}
+
+/* ====================== guide ====================== */
+function screenGuide(root) {
+  root.appendChild(pageHead('Guide', 'A browser stand-in for the Premisave frontend. It calls the real services, so what you see is what the API does.',
+    h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: async (e) => { await withBusy(e.currentTarget, pingAll); drawStatus(); } }, 'Check services'), h('button', { class: 'btn', onclick: openSettings }, 'Settings'))));
+  const status = h('div', { class: 'card', style: { padding: 0 } });
+  const drawStatus = () => {
+    clear(status);
+    const hv = S.health || [];
+    const rowEl = (dotCls, name, detail, state) => h('div', { class: 'statusrow' }, h('span', { class: 'dot ' + dotCls }), h('div', { class: 'grow' }, h('b', null, name), detail ? h('div', { class: 'mono muted' }, detail) : null), h('span', { class: 'muted' }, state));
+    ['listing', 'auth', 'wallet'].forEach((svc) => {
+      const r = hv.find((x) => x.svc === svc);
+      status.appendChild(rowEl(r ? (r.ok ? 'ok' : 'bad') : '', svc.charAt(0).toUpperCase() + svc.slice(1) + ' service', S.cfg[svc], r ? (r.ok ? 'Reachable, HTTP ' + r.status : 'Unreachable (' + (r.status || 'no response') + ')') : 'Not checked'));
+    });
+    PERSONAS.slice(0, 4).forEach((p) => status.appendChild(rowEl(S.personas[p.id].token ? 'ok' : '', p.label, '', S.personas[p.id].token ? 'Signed in' + (S.personas[p.id].role ? ' as ' + S.personas[p.id].role : '') : 'Not signed in')));
+    status.appendChild(rowEl(S.cfg.apiKey ? 'ok' : '', 'Internal API key', '', S.cfg.apiKey ? 'Set' : 'Not set. Needed for the escrow tracker.'));
+  };
+  drawStatus();
+  const onHealth = () => { if (!status.isConnected) { bus.removeEventListener('health', onHealth); return; } drawStatus(); };
+  bus.addEventListener('health', onHealth);
+  const flows = [
+    ['Publish a listing', 'Sign in as Home owner, open Host, Create or edit, fill the form and save. It starts PENDING.', ['host', 'form']],
+    ['Approve it', 'Switch the persona to Admin, open Admin, Moderation, load listings and press Approve.', ['admin', 'moderation']],
+    ['Find and book it', 'Switch to Tenant, open Discover, click the listing, pick dates on the calendar and press Book now. Repeat with the same Idempotency-Key kept to prove a retry returns the same booking.', ['discover']],
+    ['Quote and cancel', 'Trips shows the booking. Quote shows the refund before you commit; Cancel applies the policy.', ['trips', 'bookings']],
+    ['Watch the escrow', 'With ESCROW_ENABLED=true the payment is held. Wallet, Escrow tracker shows the hold, its commission and the payouts.', ['wallet', 'tracker']],
+    ['Block dates', 'Host, Availability: block a range, then try to book it as Tenant and expect a refusal.', ['host', 'dates']],
+    ['Leads', 'Tenant sends an interest from a listing. The owner reads it in Host, Leads.', ['host', 'leads']],
+    ['Settle the odd ones', 'Admin, Bookings needing review: retry a payout or mark an unconfirmed payment paid or unpaid.', ['admin', 'bookings']]
+  ];
+  root.append(h('h3', { style: { marginBottom: '8px' } }, 'Status'), status, h('h3', { style: { margin: '24px 0 12px' } }, 'Suggested test flows'),
+    h('ol', { class: 'steps', style: { padding: 0, margin: 0 } }, flows.map(([t, d, to]) => h('li', null, h('div', null, h('b', null, t), h('div', { class: 'muted' }, d), h('button', { class: 'btn sm', style: { marginTop: '4px' }, onclick: () => go(to[0], to[1]) }, 'Open'))))),
+    h('h3', { style: { margin: '24px 0 8px' } }, 'Coverage'), coverageBox());
+}
+
+function normKey(method, raw) {
+  let p = raw.replace(/\{\{base_url_[a-z_]+\}\}/, '').replace(/\?.*$/, '');
+  p = p.replace(/\{\{([a-zA-Z_]+)\}\}/g, '{$1}');
+  return method + ' ' + p;
+}
+function coverageBox() {
+  const mine = EXPLORER.filter((x) => x.url.startsWith('{{base_url_listing}}'));
+  const keys = new Set(mine.map((x) => normKey(x.method, x.url)));
+  const missing = [...keys].filter((k) => !EP[k]);
+  return h('div', { class: 'card flat' },
+    h('div', { class: 'row' }, h('span', { class: 'chip ' + (missing.length ? 'bad' : 'ok') }, (keys.size - missing.length) + ' of ' + keys.size + ' distinct listing endpoints have a form'),
+      h('span', { class: 'muted tiny' }, mine.length + ' Postman requests (some share one endpoint with different filters).')),
+    missing.length ? h('div', { class: 'notice bad', style: { marginTop: '8px' } }, 'No form for: ' + missing.join(', ')) : h('div', { class: 'muted tiny', style: { marginTop: '6px' } }, 'Every request in the collection can also be sent as is from API explorer.'));
+}
+
+/* ====================== smoke test (used by Tools) ====================== */
+async function smokeTest(out) {
+  clear(out);
+  const rows = h('tbody');
+  out.appendChild(h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', null, h('tr', null, ['Endpoint', 'Status', 'ms'].map((t) => h('th', null, t)))), rows)));
+  const specs = Object.values(EP).filter((s) => s.svc === 'listing' && s.method === 'GET');
+  for (const s of specs) {
+    const miss = (s.fields || []).filter((f) => f.in === 'path' && !(f.ctx && S.ctx[f.ctx]));
+    const tr = h('tr', null, h('td', { class: 'mono tiny' }, s.path), h('td', null, miss.length ? h('span', { class: 'chip' }, 'skipped, needs ' + miss.map((m) => m.n).join(', ')) : '...'), h('td', null, ''));
+    rows.appendChild(tr);
+    if (miss.length) continue;
+    const path = s.path.replace(/\{(\w+)\}/g, (m, n) => encodeURIComponent(S.ctx[n]));
+    const query = {}; (s.fields || []).filter((f) => f.in === 'query').forEach((f) => { if (f.def !== undefined && f.def !== '') query[f.n] = f.def; });
+    const res = await api('listing', path, { query, anon: s.auth === 'none' });
+    clear(tr.children[1]).appendChild(h('span', { class: 'stat ' + (res.status >= 500 || !res.status ? 's5' : res.status >= 400 ? 's4' : 's2') }, res.status || 'ERR'));
+    tr.children[2].textContent = res.ms;
+  }
+}
+
+/* ====================== explorer ====================== */
+function explorerVars() {
+  const v = Object.assign({}, store.get('pl-vars', {}));
+  v.base_url_listing = S.cfg.listing; v.base_url = S.cfg.auth; v.base_url_wallet = S.cfg.wallet;
+  v.internal_api_key = S.cfg.apiKey; v.token = me().token;
+  CTX_KEYS.forEach((k) => { v[k] = S.ctx[k]; });
+  v.my_user_id = me().userId;
+  return v;
+}
+function substVars(str, missing) {
+  const vars = explorerVars();
+  return String(str).replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, n) => {
+    if (n === '$guid') return uid();
+    if (n === '$timestamp') return String(Math.floor(Date.now() / 1000));
+    if (n === '$randomInt') return String(Math.floor(Math.random() * 1000));
+    if (n === 'listing_idempotency_key' || n === 'idempotency_key') {
+      if (vars.retry_same_key === 'true' && S.lastIdem) return S.lastIdem;
+      S.lastIdem = uid(); return S.lastIdem;
+    }
+    if (vars[n] !== undefined && vars[n] !== '') return vars[n];
+    if (missing) missing.push(n);
+    return m;
+  });
+}
+
+function screenExplorer(root) {
+  root.appendChild(pageHead('API explorer', 'Every request from the Postman collection (Listing Service plus the wallet calls this service depends on). Edit anything and send. {{variables}} come from the working ids, the settings and the table below.'));
+  const wrap = h('div', { class: 'grid', style: { gridTemplateColumns: 'minmax(260px,340px) 1fr', alignItems: 'start' } });
+  const listEl = h('div', { class: 'card flat scroll', style: { maxHeight: '72vh', padding: '8px' } });
+  const editor = h('div', { class: 'col' });
+  const search = h('input', { type: 'text', placeholder: 'Search by name, method or path' });
+  let selIdx = -1;
+
+  const drawList = () => {
+    clear(listEl);
+    const q = search.value.toLowerCase();
+    let folder = '';
+    EXPLORER.forEach((e, i) => {
+      if (q && !(e.name + ' ' + e.method + ' ' + e.url).toLowerCase().includes(q)) return;
+      if (e.folder !== folder) { folder = e.folder; listEl.appendChild(h('h4', { style: { margin: '10px 4px 4px' } }, folder)); }
+      listEl.appendChild(h('div', { class: 'logr' + (i === selIdx ? ' on' : ''), 'data-i': i, onclick: () => { selIdx = i; drawList(); drawEditor(e); } },
+        h('span', { class: 'method m-' + e.method }, e.method), h('span', null, e.name)));
+    });
+  };
+  search.addEventListener('input', drawList);
+
+  function drawEditor(e) {
+    clear(editor);
+    const method = sel(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], e.method);
+    const url = h('input', { type: 'text', value: e.url, class: 'mono' });
+    const headers = h('textarea', { style: { minHeight: '70px' } }, e.headers.filter((x) => !x.off).map((x) => x.k + ': ' + x.v).join('\n'));
+    const authOpts = [{ v: 'active', l: 'Active persona (' + personaLabel(S.active) + ')' }].concat(PERSONAS.map((p) => ({ v: p.id, l: p.label }))).concat([{ v: 'none', l: 'No token' }]);
+    const defAuth = e.auth === 'admin_token' ? 'admin' : e.auth === 'home_owner_token' ? 'home_owner' : e.auth === 'none' ? 'none' : 'active';
+    const auth = sel(authOpts, defAuth);
+    let bodyEl = null; const formRows = [];
+    if (e.body && e.body.mode === 'raw') bodyEl = h('textarea', { style: { minHeight: '140px' } }, e.body.raw || '');
+    if (e.body && e.body.mode === 'formdata') {
+      bodyEl = h('div', { class: 'col' });
+      e.body.form.forEach((r) => {
+        const inp = r.t === 'file' ? h('input', { type: 'file', multiple: true }) : h('textarea', { style: { minHeight: r.v && r.v.length > 60 ? '150px' : '40px' } }, r.v || '');
+        formRows.push({ r, inp });
+        bodyEl.appendChild(field(r.k + (r.t === 'file' ? ' (file)' : ''), inp));
+      });
+    }
+    const out = h('div');
+    const send = async (btn) => {
+      const missing = [];
+      const finalUrl = substVars(url.value, missing);
+      const hd = {};
+      headers.value.split('\n').forEach((line) => { const i = line.indexOf(':'); if (i > 0) hd[line.slice(0, i).trim()] = substVars(line.slice(i + 1).trim(), missing); });
+      const opts = { method: method.value, headers: hd };
+      if (auth.value === 'none') opts.anon = true; else { const pid = auth.value === 'active' ? S.active : auth.value; const tok = (S.personas[pid] || {}).token; if (tok) { opts.token = tok; } else { opts.anon = true; toast(personaLabel(pid) + ' is not signed in, sending without a token', 'bad'); } }
+      if (/\/internal\//.test(finalUrl)) { opts.anon = true; opts.apiKey = S.cfg.apiKey; }
+      if (e.body && e.body.mode === 'raw' && bodyEl.value.trim()) opts.raw = substVars(bodyEl.value, missing);
+      if (e.body && e.body.mode === 'formdata') {
+        const fd = new FormData();
+        formRows.forEach(({ r, inp }) => {
+          if (r.t === 'file') [...inp.files].forEach((f) => fd.append(r.k, f, f.name));
+          else { const val = substVars(inp.value, missing); if (/^\s*[{[]/.test(val)) fd.append(r.k, new Blob([val], { type: 'application/json' })); else fd.append(r.k, val); }
+        });
+        opts.form = fd;
+      }
+      if (missing.length) toast('Unresolved variables: ' + [...new Set(missing)].join(', '), 'bad');
+      const res = await withBusy(btn, () => api('x', finalUrl, opts));
+      clear(out).appendChild(resultBox(res, {}));
+      const d = unwrap(res.data);
+      if (res.ok && d && typeof d === 'object') {
+        if (d.id && /\/listings$/.test(finalUrl.split('?')[0]) && method.value === 'POST') setCtx('listing_id', d.id);
+        if (d.id && /\/bookings$/.test(finalUrl.split('?')[0]) && method.value === 'POST') { setCtx('booking_id', d.id); setCtx('escrow_hold_reference', 'booking-' + d.id); }
+        if (d.blockId) setCtx('block_id', d.blockId);
+      }
+    };
+    editor.append(h('div', { class: 'card' },
+      h('div', { class: 'card-h' }, h('h3', null, e.name), h('span', { class: 'chip' }, e.folder)),
+      h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, h('div', { style: { width: '110px' } }, method), h('div', { style: { flex: 1 } }, url), h('button', { class: 'btn primary', onclick: (ev) => send(ev.currentTarget) }, 'Send')),
+      h('div', { class: 'grid g2', style: { marginTop: '10px' } }, field('Auth', auth), field('Headers', headers)),
+      bodyEl ? h('div', { style: { marginTop: '10px' } }, h('h4', { style: { marginBottom: '6px' } }, 'Body'), bodyEl) : null,
+      out), varsPanel());
+  }
+
+  function varsPanel() {
+    const mineVars = store.get('pl-vars', {});
+    const body = h('div', { class: 'col' });
+    const draw = () => {
+      clear(body);
+      const vars = store.get('pl-vars', {});
+      Object.keys(vars).forEach((k) => body.appendChild(h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, h('code', { style: { minWidth: '160px' } }, k), h('input', { type: 'text', value: vars[k], onchange: (e) => { const v = store.get('pl-vars', {}); v[k] = e.target.value; store.set('pl-vars', v); } }),
+        h('button', { class: 'btn sm danger', onclick: () => { const v = store.get('pl-vars', {}); delete v[k]; store.set('pl-vars', v); draw(); } }, 'Remove'))));
+      const n = h('input', { type: 'text', placeholder: 'name, e.g. retry_same_key' }); const val = h('input', { type: 'text', placeholder: 'value' });
+      body.appendChild(h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, n, val, h('button', { class: 'btn sm', onclick: () => { if (!n.value) return; const v = store.get('pl-vars', {}); v[n.value.trim()] = val.value; store.set('pl-vars', v); draw(); } }, 'Add')));
+    };
+    draw();
+    return h('details', { class: 'card flat' }, h('summary', { style: { cursor: 'pointer', fontWeight: 700 } }, 'Variables (' + Object.keys(mineVars).length + ' custom)'),
+      h('p', { class: 'muted tiny' }, 'Built in: base_url_listing, base_url, base_url_wallet, token, internal_api_key, my_user_id and the working ids from the bar. Add retry_same_key = true to reuse the last idempotency key on the next send.'), body);
+  }
+
+  wrap.append(h('div', { class: 'col' }, search, listEl), editor);
+  root.append(coverageBox(), h('div', { style: { height: '12px' } }), wrap);
+  drawList();
+  editor.appendChild(h('div', { class: 'empty' }, 'Pick a request on the left.'));
+}
+
+/* ====================== boot ====================== */
+window.addEventListener('DOMContentLoaded', () => {
+  applyTheme();
+  buildShell();
+  buildDock();
+  go(S.screen === 'guide' || SCREENS.find((s) => s.id === S.screen) ? S.screen : 'guide');
+  pingAll();
+  if (S.currency !== 'USD') loadRates(true);
+});
+
+
+</script>
+</body>
+</html>
