@@ -265,6 +265,19 @@ code,pre,.mono{font-family:var(--mono);font-size:12.5px}
 .env{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid var(--line-2);color:var(--ink-2);font-family:var(--mono);font-size:11.5px;background:var(--panel);border-radius:var(--radius)}
 .cur{height:34px;width:78px}
 
+/* live control */
+.live-btn{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 11px;border-radius:var(--radius);border:1px solid var(--line-2);background:var(--panel);color:var(--ink-2);font-weight:600;font-size:12.5px}
+.live-btn:hover{border-color:var(--ink-2);color:var(--ink)}
+.live-btn .pulse{width:9px;height:9px;background:var(--good);flex:none;animation:pulse 2.4s ease-in-out infinite}
+.live-btn.busy .pulse{background:var(--accent);animation-duration:.7s}
+.live-btn.off .pulse{background:var(--ink-3);animation:none}
+.live-btn.bad .pulse{background:var(--bad);animation:none}
+.live-btn.bad{color:var(--bad);border-color:var(--bad)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.live-menu{width:330px}
+.live-menu .pill-tabs{width:100%}
+.live-menu .pill-tabs button{flex:1;padding:0 6px}
+
 /* account menu */
 .who{position:relative}
 .who>button{display:flex;align-items:center;gap:8px;height:34px;padding:0 8px 0 4px;border-radius:var(--radius);border:1px solid var(--line-2);background:var(--panel)}
@@ -538,7 +551,7 @@ details.jv[open]>summary::before{content:"\2212"}
   .fields{grid-template-columns:minmax(0,1fr)}
   .menu{width:min(330px,calc(100vw - 32px))}
 }
-@media(prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition:none!important}}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition:none!important}.live-btn .pulse{animation:none!important}}
 
 [data-font="plex"]{--sans:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;--display:"IBM Plex Sans Condensed","IBM Plex Sans","Arial Narrow","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;--mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
 [data-font="inter"]{--sans:"Inter","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;--display:"Inter","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;--mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
@@ -744,9 +757,17 @@ async function api(svc, path, o) {
     };
   } finally { clearTimeout(timer); }
   entry.status = res.status; entry.ms = res.ms; entry.resBody = res.error ? res.error : res.data; entry.resHeaders = res.headers;
-  S.log.unshift(entry);
-  if (S.log.length > 300) S.log.pop();
-  emit('log', entry);
+  if (!o.quiet) {
+    S.log.unshift(entry);
+    if (S.log.length > 300) S.log.pop();
+    emit('log', entry);
+  }
+  if (res.status === 401 && !o.noRefresh && !o.anon && o.token === undefined && me().refresh && !String(path).startsWith('/auth/')) {
+    if (await refreshSession()) return api(svc, path, Object.assign({}, o, { noRefresh: true }));
+  }
+  if (o.quiet && method === 'GET') LIVE.offline = !res.status;
+  else if (res.status) LIVE.offline = false;
+  if (res.ok && method !== 'GET' && !o.quiet) liveKick();
   return res;
 }
 
@@ -1134,11 +1155,14 @@ function endpointCard(spec, o) {
     return { path, query, body, files, headers };
   };
 
-  const send = async (btn) => {
+  let lastSig = null;
+  const send = async (btn, opt) => {
+    opt = opt || {};
     const c = collect();
     const bad = (spec.fields || []).filter((f) => f.req && f.in === 'path' && !inputs[f.n].value);
-    if (bad.length) { toast('Missing: ' + bad.map((f) => f.n).join(', '), 'bad'); return; }
+    if (bad.length) { if (!opt.silent) toast('Missing: ' + bad.map((f) => f.n).join(', '), 'bad'); return; }
     const opts = { method: spec.method, query: c.query, headers: Object.assign({}, c.headers) };
+    if (opt.silent) opts.quiet = true;
     if (spec.auth === 'none') opts.anon = true;
     if (spec.auth === 'apikey') { opts.anon = true; opts.apiKey = S.cfg.apiKey; if (!S.cfg.apiKey) toast('No internal API key set (Settings). Sending without it.', 'bad'); }
     if (spec.auth === 'bearer+key') opts.apiKey = S.cfg.apiKey;
@@ -1156,6 +1180,10 @@ function endpointCard(spec, o) {
       opts.form = fd;
     }
     const res = await withBusy(btn, () => api(spec.svc, c.path, opts));
+    if (opt.silent) {
+      if (!res.status) return res;
+      const sg = sigOf(res); if (sg === lastSig) return res; lastSig = sg;
+    } else lastSig = sigOf(res);
     if (spec.idem && res.status && !reuse.checked) idemInput.value = uid();
     const extra = { refresh: () => send(btn) };
     if (inputs.page) extra.goPage = (p) => { inputs.page.value = p; send(btn); };
@@ -1196,6 +1224,7 @@ function endpointCard(spec, o) {
       spec.desc ? h('div', { class: 'desc' }, spec.desc) : null,
       fieldsEl, actions, resultHolder));
   card.send = () => send(sendBtn);
+  if (spec.method === 'GET') liveRegister(card, () => (lastSig === null ? null : send(null, { silent: true })), () => card.classList.contains('open'));
   return card;
 }
 
@@ -1392,6 +1421,135 @@ function pickField(input, kind, o) {
   return h('div', { class: 'idpick' }, input, btn);
 }
 
+/* ====================== live updates ====================== */
+/* Views register a refresher. A timer re-runs the ones that are on screen and open, quietly,
+   and only redraws a view when its data actually changed. Any successful change request
+   (POST, PUT, PATCH, DELETE) triggers an immediate pass, so lists reflect it without a reload. */
+const LIVE = {
+  on: look.get('pl-live', 'on') !== 'off',
+  sec: Number(look.get('pl-live-sec', '15')) || 15,
+  items: new Set(), timer: null, last: 0, offline: false, running: false, kickT: null, healthAt: 0
+};
+const sigOf = (res) => res.status + ':' + (typeof res.text === 'string' && res.text.length < 2000000 ? res.text : JSON.stringify(res.data));
+
+function liveRegister(el, fn, active) {
+  const it = { el, fn, active, seen: false, born: Date.now() };
+  LIVE.items.add(it);
+  return it;
+}
+function liveDue(it) {
+  const el = it.el;
+  if (!el.isConnected) {
+    if (it.seen || Date.now() - it.born > 60000) LIVE.items.delete(it);
+    return false;
+  }
+  it.seen = true;
+  if (!el.getClientRects().length) return false;
+  if (it.active && !it.active()) return false;
+  const ae = document.activeElement;
+  if (ae && el.contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return false;
+  return true;
+}
+async function liveRun(o) {
+  o = o || {};
+  if (LIVE.running) { LIVE.again = true; return; }
+  LIVE.running = true; emit('live');
+  try {
+    await liveKeepToken();
+    const due = [...LIVE.items].filter(liveDue);
+    for (const it of due) { try { await it.fn(); } catch (e) { console.warn('live refresh failed', e); } }
+    if (Date.now() - LIVE.healthAt > 30000 || o.force) { LIVE.healthAt = Date.now(); await pingAll({ quiet: true }); }
+    LIVE.last = Date.now();
+  } finally {
+    LIVE.running = false; emit('live');
+    if (LIVE.again) { LIVE.again = false; liveKick(); }
+  }
+}
+function liveKick() {
+  clearTimeout(LIVE.kickT);
+  LIVE.kickT = setTimeout(() => liveRun({ force: false }), 450);
+}
+function liveSchedule() {
+  clearTimeout(LIVE.timer);
+  if (!LIVE.on) { emit('live'); return; }
+  LIVE.timer = setTimeout(async () => { if (!document.hidden) await liveRun(); liveSchedule(); }, LIVE.sec * 1000);
+}
+function liveSet(on, sec) {
+  LIVE.on = on; if (sec) LIVE.sec = sec;
+  look.set('pl-live', on ? 'on' : 'off'); look.set('pl-live-sec', String(LIVE.sec));
+  liveSchedule(); emit('live');
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - LIVE.last > 4000) liveRun(); });
+window.addEventListener('focus', () => { if (Date.now() - LIVE.last > 4000) liveRun(); });
+window.addEventListener('online', () => liveRun({ force: true }));
+
+/* keep the signed in persona's token fresh so a view never goes stale on a 401 */
+let refreshing = null;
+function refreshSession(pid) {
+  const p = S.personas[pid || S.active];
+  if (!p || !p.refresh) return Promise.resolve(false);
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    const res = await api('auth', '/auth/refresh', { method: 'POST', json: { refreshToken: p.refresh }, anon: true, quiet: true, noRefresh: true });
+    const d = res.data || {};
+    if (res.ok && d.token) { saveToken(p, d); refreshWho(); return true; }
+    return false;
+  })().finally(() => { refreshing = null; });
+  return refreshing;
+}
+async function liveKeepToken() {
+  const p = me();
+  if (!p.token || !p.refresh) return;
+  const c = decodeJwt(p.token);
+  if (c.exp && c.exp * 1000 - Date.now() < 90000) await refreshSession();
+}
+
+/* other tabs: pick up sign ins and working ids made elsewhere */
+window.addEventListener('storage', (e) => {
+  if (e.key === 'pl-personas' || e.key === 'pl-active') {
+    try {
+      const np = JSON.parse(localStorage.getItem('pl-personas') || '{}'); Object.keys(np).forEach((k) => { S.personas[k] = Object.assign(S.personas[k] || {}, np[k]); });
+      const na = JSON.parse(localStorage.getItem('pl-active') || 'null'); if (na && PERSONAS.some((x) => x.id === na)) S.active = na;
+    } catch (err) { /* ignore */ }
+    refreshWho(); renderMain();
+  }
+  if (e.key === 'pl-ctx') {
+    try { const nc = JSON.parse(e.newValue || '{}'); CTX_KEYS.forEach((k) => { if ((nc[k] || '') !== S.ctx[k]) { S.ctx[k] = nc[k] || ''; emit('ctx', { key: k, val: S.ctx[k], quiet: true }); } }); } catch (err) { /* ignore */ }
+  }
+});
+
+/* top bar control */
+function liveControl() {
+  const dot = h('span', { class: 'pulse' });
+  const lbl = h('span', null, 'Live');
+  const btn = h('button', { class: 'live-btn', id: 'live-btn', type: 'button', 'aria-haspopup': 'true', onclick: (e) => { e.stopPropagation(); toggleLiveMenu(); } }, dot, lbl);
+  const draw = () => {
+    const bad = LIVE.on && LIVE.offline;
+    btn.className = 'live-btn' + (!LIVE.on ? ' off' : bad ? ' bad' : '') + (LIVE.running ? ' busy' : '');
+    lbl.textContent = !LIVE.on ? 'Paused' : bad ? 'Offline' : 'Live';
+    btn.title = (LIVE.on ? 'Refreshing open views every ' + LIVE.sec + 's. ' : 'Automatic refresh is off. ') + (LIVE.last ? 'Updated ' + new Date(LIVE.last).toLocaleTimeString() + '.' : 'Not refreshed yet.');
+  };
+  bus.addEventListener('live', draw); bus.addEventListener('health', () => { LIVE.offline = (S.health || []).length > 0 && (S.health || []).every((x) => !x.ok && !x.cors); draw(); });
+  draw();
+  return h('div', { class: 'who', id: 'live-wrap' }, btn);
+}
+let liveMenu = null;
+function toggleLiveMenu() {
+  if (liveMenu) { liveMenu.remove(); liveMenu = null; return; }
+  const opts = [['Off', 0], ['5s', 5], ['10s', 10], ['15s', 15], ['30s', 30], ['60s', 60]];
+  const on = (s) => (s === 0 ? !LIVE.on : LIVE.on && LIVE.sec === s);
+  const seg = h('div', { class: 'pill-tabs' }, opts.map(([label, s]) => h('button', { type: 'button', class: on(s) ? 'on' : '', 'data-s': String(s),
+    onclick: () => { s === 0 ? liveSet(false) : liveSet(true, s); $$('button', seg).forEach((b) => b.classList.toggle('on', on(Number(b.dataset.s)))); } }, label)));
+  liveMenu = h('div', { class: 'menu live-menu' },
+    h('div', { style: { padding: '8px 8px 4px', fontWeight: 600 } }, 'Automatic refresh'),
+    h('div', { class: 'muted tiny', style: { padding: '0 8px 8px' } }, 'Open lists, calendars, wallet and escrow views update on their own. Changes you make refresh them straight away.'),
+    h('div', { style: { padding: '0 8px 8px' } }, seg),
+    h('hr'),
+    h('div', { class: 'it', onclick: () => { liveRun({ force: true }); } }, icon('plus', 16), 'Refresh now', h('span', { class: 'muted tiny', style: { marginLeft: 'auto' } }, LIVE.last ? new Date(LIVE.last).toLocaleTimeString() : 'never')));
+  $('#live-wrap').append(liveMenu);
+  setTimeout(() => document.addEventListener('click', function close(e) { if (liveMenu && !$('#live-wrap').contains(e.target)) { liveMenu.remove(); liveMenu = null; } document.removeEventListener('click', close); }), 0);
+}
+
 /* ====================== endpoint registry ====================== */
 (function () {
   const pad = (n) => String(n).padStart(2, '0');
@@ -1546,10 +1704,12 @@ function availabilityCalendar(listingId, opts) {
   const box = h('div', { class: 'cal' });
   const note = h('div', { class: 'muted tiny', style: { marginTop: '6px' } });
 
-  async function load() {
+  let calSig = '';
+  async function load(silent) {
     const first = new Date(cur.getFullYear(), cur.getMonth(), 1);
     const last = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
-    const res = await api('listing', '/listings/' + encodeURIComponent(listingId) + '/availability', { query: { from: ymd(first), to: ymd(last) }, anon: true });
+    const res = await api('listing', '/listings/' + encodeURIComponent(listingId) + '/availability', { query: { from: ymd(first), to: ymd(last) }, anon: true, quiet: silent === true });
+    if (silent === true) { if (!res.status) return; const sg = sigOf(res); if (sg === calSig) return; calSig = sg; } else calSig = sigOf(res);
     off = new Set();
     if (res.ok) {
       const d = unwrap(res.data) || {};
@@ -1598,6 +1758,7 @@ function availabilityCalendar(listingId, opts) {
   box.selection = () => ({ start, end });
   box.reset = () => { start = null; end = null; draw(); };
   draw(); load();
+  liveRegister(box, () => load(true));
   return box;
 }
 
@@ -1902,15 +2063,17 @@ function screenDiscover(root) {
   }
   modes.forEach((m) => pills.appendChild(h('button', { onclick: () => { mode = m; store.set('pl-dmode', m); drawFilters(); run(); } }, m)));
 
-  async function run(btn) {
+  let runSig = null;
+  async function run(btn, silent) {
     let path; let query = {};
     if (mode === 'Search') { path = '/listings/search'; query = { query: f.query.value, category: f.category.value, city: f.city.value, minPrice: f.minPrice.value, maxPrice: f.maxPrice.value }; }
     if (mode === 'Short term') { path = '/listings/short-term'; query = { city: f.city.value }; }
     if (mode === 'Nearby') { path = '/locations/nearby'; query = { latitude: f.lat.value, longitude: f.lng.value, radiusKm: f.radius.value }; }
     if (mode === 'City') { path = '/locations/city'; query = { city: f.city.value }; }
     if (mode === 'Map bounds') { path = '/locations/bounds'; query = { minLat: f.minLat.value, maxLat: f.maxLat.value, minLng: f.minLng.value, maxLng: f.maxLng.value }; }
-    clear(results).appendChild(h('div', { class: 'empty' }, 'Searching...'));
-    const res = await withBusy(btn, () => api('listing', path, { query, anon: true }));
+    if (!silent) clear(results).appendChild(h('div', { class: 'empty' }, 'Searching...'));
+    const res = await withBusy(btn, () => api('listing', path, { query, anon: true, quiet: silent === true }));
+    if (silent === true) { if (!res.status) return; const sg = path + sigOf(res); if (sg === runSig) return; runSig = sg; } else runSig = path + sigOf(res);
     clear(results);
     if (!res.ok) { results.appendChild(h('div', { class: 'notice bad' }, errText(res), res.hint ? h('div', { class: 'tiny' }, res.hint) : null)); results.appendChild(resultBox(res, {})); return; }
     const list = asList(res.data) || [];
@@ -1925,6 +2088,7 @@ function screenDiscover(root) {
     results);
   drawFilters();
   run();
+  liveRegister(results, () => run(null, true));
 }
 
 /* ====================== shared bits ====================== */
@@ -2241,8 +2405,10 @@ function adminModeration() {
     toast(res.ok ? verb + ' done' : errText(res), res.ok ? 'ok' : 'bad');
     if (res.ok) run();
   };
-  async function run(btn) {
-    const res = await withBusy(btn, () => api('listing', '/admin/listings', { query: { status: f.status.value, deleted: f.deleted.value, archived: f.archived.value, page: f.page.value, size: f.size.value, sort: 'createdAt,desc' } }));
+  let admSig = null;
+  async function run(btn, silent) {
+    const res = await withBusy(btn, () => api('listing', '/admin/listings', { quiet: silent === true, query: { status: f.status.value, deleted: f.deleted.value, archived: f.archived.value, page: f.page.value, size: f.size.value, sort: 'createdAt,desc' } }));
+    if (silent === true) { if (!res.status) return; const sg = sigOf(res); if (sg === admSig) return; admSig = sg; } else admSig = sigOf(res);
     clear(out);
     if (!res.ok) { out.append(h('div', { class: 'notice bad' }, errText(res)), resultBox(res, {})); return; }
     const list = asList(res.data) || [];
@@ -2267,6 +2433,7 @@ function adminModeration() {
           h('button', { class: 'btn sm danger fill', onclick: (e) => act(e.currentTarget, l, 'Hard delete', 'DELETE', '/hard-delete', true) }, 'Hard delete'),
           h('button', { class: 'btn sm', onclick: () => openListing(idOf(l)) }, 'Open')))))))));
   }
+  liveRegister(out, () => (admSig === null ? null : run(null, true)));
   return h('div', { class: 'col' },
     h('div', { class: 'card' }, h('div', { class: 'card-h' }, h('h3', null, 'Listing moderation'), h('span', { class: 'chip warn' }, ADMIN_ROLES)),
       h('div', { class: 'grid g4' }, field('status', f.status), field('deleted', f.deleted), field('archived', f.archived), field('size', f.size)),
@@ -2291,10 +2458,12 @@ function escrowTracker(initialRef) {
   const ref = h('input', { type: 'text', value: initialRef || S.ctx.escrow_hold_reference || (S.ctx.booking_id ? 'booking-' + S.ctx.booking_id : ''), placeholder: 'booking-<booking id>' });
   bus.addEventListener('ctx', (e) => { if (e.detail.key === 'escrow_hold_reference') ref.value = e.detail.val; });
   const out = h('div');
-  const lookup = async (btn) => {
-    if (!ref.value) { toast('Enter a hold reference', 'bad'); return; }
+  let escSig = null;
+  const lookup = async (btn, silent) => {
+    if (!ref.value) { if (silent !== true) toast('Enter a hold reference', 'bad'); return; }
     setCtx('escrow_hold_reference', ref.value);
-    const res = await withBusy(btn, () => api('wallet', '/internal/escrow/' + encodeURIComponent(ref.value), { anon: true, apiKey: S.cfg.apiKey }));
+    const res = await withBusy(btn, () => api('wallet', '/internal/escrow/' + encodeURIComponent(ref.value), { anon: true, apiKey: S.cfg.apiKey, quiet: silent === true }));
+    if (silent === true) { if (!res.status) return; const sg = ref.value + sigOf(res); if (sg === escSig) return; escSig = sg; } else escSig = ref.value + sigOf(res);
     clear(out);
     if (!res.ok) { out.append(h('div', { class: 'notice bad' }, errText(res)), resultBox(res, {})); return; }
     const d = unwrap(res.data) || {};
@@ -2317,6 +2486,7 @@ function escrowTracker(initialRef) {
       h('button', { class: 'btn', onclick: () => { ref.value = 'booking-' + S.ctx.booking_id; lookup(); } }, 'Use working booking')),
     out);
   if (ref.value) setTimeout(() => lookup(), 0);
+  liveRegister(box, () => (escSig === null ? null : lookup(null, true)));
   return box;
 }
 function openEscrowTracker(reference) { openDrawer('Escrow hold', (body) => body.appendChild(escrowTracker(reference))); }
@@ -2492,7 +2662,7 @@ function buildShell() {
       h('button', { class: 'foot-btn', onclick: openAccount }, icon('user', 16), 'Accounts'),
       h('button', { class: 'foot-btn', onclick: openSettings }, icon('gear', 16), 'Connection'),
       h('button', { class: 'foot-btn', onclick: openAppearance }, icon('palette', 16), 'Appearance', h('span', { class: 'tn', 'data-theme-name': '' }, themeName())),
-      h('button', { class: 'svc', id: 'health', title: 'Check the three services', onclick: pingAll }, h('span', { class: 'dot' }), 'Services')));
+      h('button', { class: 'svc', id: 'health', title: 'Check the three services', onclick: () => pingAll() }, h('span', { class: 'dot' }), 'Services')));
   const logBtn = h('button', { class: 'icon-btn', id: 'log-btn', type: 'button', title: 'Request log', 'aria-label': 'Toggle request log', onclick: () => toggleLog() }, icon('list', 16));
   const themeBtn = h('button', { class: 'icon-btn', type: 'button', title: 'Appearance', 'aria-label': 'Choose theme and font', onclick: openAppearance }, icon('palette', 16));
   const main = h('div', { class: 'main' },
@@ -2500,7 +2670,7 @@ function buildShell() {
       h('h1', { id: 'screen-title' }, ''),
       h('button', { class: 'btn sm', style: { flex: 'none' }, onclick: openIds }, icon('plus', 12), 'Working ids'),
       h('div', { class: 'ctx-tags', id: 'ctxbar' }),
-      h('span', { class: 'spacer' }), curSel, logBtn, themeBtn, h('div', { class: 'who', id: 'who' })),
+      h('span', { class: 'spacer' }), curSel, liveControl(), logBtn, themeBtn, h('div', { class: 'who', id: 'who' })),
     h('div', { class: 'content' }, h('main', { id: 'main', class: 'page' })));
   app.appendChild(h('div', { class: 'shell' }, side, main));
   drawCtxBar(); fillCurrencies(); refreshWho(); syncLookUi();
@@ -2571,20 +2741,37 @@ function openIds() {
   });
 }
 
-async function pingAll() {
-  const el = $('#health'); const dot = $('.dot', el);
+/* A request that never gets an answer is either a dead service or a browser CORS block.
+   A no-cors probe tells them apart: it succeeds (with an opaque answer) whenever the service is up. */
+async function probeUp(svc, path) {
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 6000);
+    await fetch(buildUrl(svc, path), { mode: 'no-cors', cache: 'no-store', signal: ctl.signal });
+    clearTimeout(t); return true;
+  } catch (e) { return false; }
+}
+async function pingAll(po) {
+  const quiet = !!(po && po.quiet === true);
+  const el = $('#health'); const dot = el && $('.dot', el);
+  if (!el) return [];
   const checks = [['listing', '/system/health'], ['auth', '/actuator/health'], ['wallet', '/actuator/health']];
   const out = [];
   for (const [svc, path] of checks) {
-    const r = await api(svc, path, { anon: true });
-    out.push({ svc, ok: r.status > 0 && r.status < 500, status: r.status });
+    const r = await api(svc, path, { anon: true, quiet });
+    const o = { svc, ok: r.status > 0 && r.status < 500, status: r.status, cors: false };
+    if (!r.status) o.cors = await probeUp(svc, path);
+    out.push(o);
   }
   S.health = out;
-  dot.className = 'dot ' + (out.every((o) => o.ok) ? 'ok' : out.some((o) => o.ok) ? '' : 'bad');
-  el.title = out.map((o) => o.svc + ': ' + (o.status || 'unreachable')).join('   ');
+  const good = (o) => o.ok;
+  dot.className = 'dot ' + (out.every(good) ? 'ok' : out.some((o) => o.ok || o.cors) ? 'warn' : 'bad');
+  el.title = out.map((o) => o.svc + ': ' + (o.cors ? 'up, blocked by CORS' : (o.status || 'unreachable'))).join('   ');
   emit('health');
   return out;
 }
+const corsFix = () => location.protocol === 'file:'
+  ? 'This page was opened from disk, so its origin is "null" and the services refuse it. Serve it over http (for example run python3 -m http.server 5500 in this folder, then open http://localhost:5500) and add that origin to the service CORS setting.'
+  : 'Add ' + location.origin + ' to CORS_ALLOWED_ORIGINS (or the service CORS setting) and restart it.';
 
 /* ====================== account ====================== */
 function openAccount() {
@@ -2624,7 +2811,7 @@ function openAccount() {
         h('div', { class: 'hr' }),
         field('Access token', tok),
         h('div', { class: 'row' },
-          h('button', { class: 'btn', onclick: () => { p.token = tok.value.trim(); const c = decodeJwt(p.token); p.userId = c.userId || c.sub || ''; p.role = c.role || (c.roles && c.roles[0]) || p.role; savePersonas(); refreshWho(); draw(); toast('Token saved'); } }, 'Use pasted token'),
+          h('button', { class: 'btn', onclick: () => { p.token = tok.value.trim(); const c = decodeJwt(p.token); p.userId = c.userId || c.sub || ''; p.role = roleName(c.role || (c.roles && c.roles[0])) || p.role; savePersonas(); refreshWho(); draw(); toast('Token saved'); } }, 'Use pasted token'),
           p.token ? h('button', { class: 'btn', onclick: () => copy(p.token, 'Token') }, 'Copy token') : null),
         p.token ? h('dl', { class: 'kv' }, h('dt', null, 'User id'), h('dd', null, p.userId || '-'), h('dt', null, 'Role'), h('dd', null, p.role || claims.role || '-'),
           h('dt', null, 'Expires'), h('dd', null, claims.exp ? new Date(claims.exp * 1000).toLocaleString() + (claims.exp * 1000 < Date.now() ? '  (expired)' : '') : '-')) : h('div', { class: 'notice warn' }, 'Not signed in as ' + personaLabel(pid) + '.'),
@@ -2637,10 +2824,15 @@ function openAccount() {
   });
 }
 
+function roleName(r) {
+  if (Array.isArray(r)) r = r[0];
+  if (r && typeof r === 'object') r = r.name || r.authority || r.role || '';
+  return String(r || '').replace(/^ROLE_/, '');
+}
 function saveToken(p, d) {
   p.token = d.token; p.refresh = d.refreshToken || p.refresh;
   const c = decodeJwt(d.token);
-  p.userId = c.userId || c.sub || p.userId; p.role = d.role || c.role || p.role;
+  p.userId = c.userId || c.sub || p.userId; p.role = roleName(d.role || c.role || (c.roles && c.roles[0])) || p.role;
   savePersonas();
 }
 
@@ -2735,9 +2927,10 @@ function screenGuide(root) {
     const rowEl = (dotCls, name, detail, state) => h('div', { class: 'statusrow' }, h('span', { class: 'dot ' + dotCls }), h('div', { class: 'grow' }, h('b', null, name), detail ? h('div', { class: 'mono muted' }, detail) : null), h('span', { class: 'muted' }, state));
     ['listing', 'auth', 'wallet'].forEach((svc) => {
       const r = hv.find((x) => x.svc === svc);
-      status.appendChild(rowEl(r ? (r.ok ? 'ok' : 'bad') : '', svc.charAt(0).toUpperCase() + svc.slice(1) + ' service', S.cfg[svc], r ? (r.ok ? 'Reachable, HTTP ' + r.status : 'Unreachable (' + (r.status || 'no response') + ')') : 'Not checked'));
+      status.appendChild(rowEl(r ? (r.ok ? 'ok' : r.cors ? 'warn' : 'bad') : '', svc.charAt(0).toUpperCase() + svc.slice(1) + ' service', S.cfg[svc], r ? (r.ok ? 'Reachable, HTTP ' + r.status : r.cors ? 'Online, but the browser blocks it (CORS)' : 'Unreachable (' + (r.status || 'no response') + ')') : 'Not checked'));
+      if (r && r.cors) status.appendChild(h('div', { class: 'notice warn', style: { margin: '0 14px 10px' } }, corsFix()));
     });
-    PERSONAS.slice(0, 4).forEach((p) => status.appendChild(rowEl(S.personas[p.id].token ? 'ok' : '', p.label, '', S.personas[p.id].token ? 'Signed in' + (S.personas[p.id].role ? ' as ' + S.personas[p.id].role : '') : 'Not signed in')));
+    PERSONAS.slice(0, 4).forEach((p) => status.appendChild(rowEl(S.personas[p.id].token ? 'ok' : '', p.label, '', S.personas[p.id].token ? 'Signed in' + (S.personas[p.id].role ? ' as ' + String(S.personas[p.id].role) : '') : 'Not signed in')));
     status.appendChild(rowEl(S.cfg.apiKey ? 'ok' : '', 'Internal API key', '', S.cfg.apiKey ? 'Set' : 'Not set. Needed for the escrow tracker.'));
   };
   drawStatus();
@@ -2920,6 +3113,7 @@ window.addEventListener('DOMContentLoaded', () => {
   buildDock();
   go(S.screen === 'guide' || SCREENS.find((s) => s.id === S.screen) ? S.screen : 'guide');
   pingAll();
+  liveSchedule();
   if (S.currency !== 'USD') loadRates(true);
 });
 
