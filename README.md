@@ -1,93 +1,66 @@
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0F4C81&height=240&section=header&text=Premisave%20Listing%20Service&fontSize=52&fontColor=ffffff&fontAlignY=34&desc=Real%20estate%20listings%2C%20bookings%2C%20and%20lead%20capture%20microservice&descSize=18&descAlignY=58&animation=fadeIn" alt="Premisave Listing Service - real estate listings, bookings, and lead capture microservice banner" />
-</p>
+<div align="center">
 
-<h1 align="center">Premisave Listing Service: Real Estate Listings, Bookings &amp; Ad Promotion API</h1>
+<img src="docs/assets/banner.svg" alt="Premisave Listing Service. List it, find it, book it." width="100%"/>
 
-<p align="center">
-  <b>A production-minded Spring Boot 4 &amp; MongoDB microservice that powers listing management, short-term rental bookings, lead capture, and paid ad promotion for the Premisave real estate platform.</b>
-</p>
+<br/>
 
-<p align="center">
-  <a href="https://github.com/peacemakerbill">
-    <img src="https://avatars.githubusercontent.com/u/262163756?v=4&s=200" width="110" height="110" alt="Bill Graham Peacemaker (peacemakerbill) GitHub profile picture" />
-  </a>
-  <br/>
-  <sub>Built by <a href="https://github.com/peacemakerbill"><b>Bill Graham Peacemaker</b></a> (<code>@peacemakerbill</code>) · Backend Developer &amp; API Support Engineer · Nairobi, Kenya</sub>
-</p>
+[![Java 21](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
+[![Spring Boot 4.1](https://img.shields.io/badge/Spring_Boot-4.1-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![MongoDB Spring Data](https://img.shields.io/badge/MongoDB-Spring_Data-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com)
+[![Redis Cache](https://img.shields.io/badge/Redis-Cache-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io)
+[![Maven Wrapper](https://img.shields.io/badge/Maven-Wrapper-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white)](https://maven.apache.org)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" alt="Java 21" />
-  <img src="https://img.shields.io/badge/Spring_Boot-4.1.1-6DB33F?style=for-the-badge&logo=springboot&logoColor=white" alt="Spring Boot 4.1.1" />
-  <img src="https://img.shields.io/badge/Spring_Framework-7.0.9-6DB33F?style=for-the-badge&logo=spring&logoColor=white" alt="Spring Framework 7" />
-  <img src="https://img.shields.io/badge/MongoDB-Spring_Data-47A248?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB with Spring Data" />
-  <img src="https://img.shields.io/badge/Redis-Bucket4j-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis and Bucket4j" />
-  <img src="https://img.shields.io/badge/Maven-Build-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white" alt="Apache Maven" />
-</p>
+![Resilience4j Circuit breaker](https://img.shields.io/badge/Resilience4j-Circuit_breaker-0E3B2F?style=flat-square)
+![OpenAPI Swagger UI](https://img.shields.io/badge/OpenAPI-Swagger_UI-85EA2D?style=flat-square&logo=swagger&logoColor=white)
+![License Proprietary](https://img.shields.io/badge/License-Proprietary-C0392B?style=flat-square)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Image_Storage-Local_or_Network_Folder-555555?style=for-the-badge" alt="Local or network folder image storage" />
-  <img src="https://img.shields.io/badge/Thymeleaf-Email_Templates-005F0F?style=for-the-badge&logo=thymeleaf&logoColor=white" alt="Thymeleaf email templates" />
-  <img src="https://img.shields.io/badge/Frankfurter-Currency_API-00A651?style=for-the-badge" alt="Frankfurter currency API" />
-  <img src="https://img.shields.io/badge/OpenFeign-Resilience4j-6DB33F?style=for-the-badge" alt="OpenFeign and Resilience4j" />
-  <img src="https://img.shields.io/badge/JWT-Spring_Security_7-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white" alt="JWT and Spring Security 7" />
-</p>
+[![Last commit](https://img.shields.io/github/last-commit/peacemakerbill/premisave-listing-service?style=flat-square&color=14493B)](https://github.com/peacemakerbill/premisave-listing-service/commits/main)
+[![Stars](https://img.shields.io/github/stars/peacemakerbill/premisave-listing-service?style=flat-square&color=14493B)](https://github.com/peacemakerbill/premisave-listing-service/stargazers)
+[![Issues](https://img.shields.io/github/issues/peacemakerbill/premisave-listing-service?style=flat-square&color=14493B)](https://github.com/peacemakerbill/premisave-listing-service/issues)
+[![Frontend](https://img.shields.io/badge/frontend-premisave__flutter__frontend-0E3B2F?style=flat-square&logo=flutter&logoColor=E3A72F)](https://github.com/peacemakerbill/premisave_flutter_frontend)
 
-<p align="center">
-  <a href="https://github.com/peacemakerbill/premisave-listing-service/stargazers"><img src="https://img.shields.io/github/stars/peacemakerbill/premisave-listing-service?style=for-the-badge&logo=github" alt="GitHub stars" /></a>
-  <a href="https://github.com/peacemakerbill/premisave-listing-service/network/members"><img src="https://img.shields.io/github/forks/peacemakerbill/premisave-listing-service?style=for-the-badge&logo=github" alt="GitHub forks" /></a>
-  <a href="https://github.com/peacemakerbill/premisave-listing-service/issues"><img src="https://img.shields.io/github/issues/peacemakerbill/premisave-listing-service?style=for-the-badge" alt="Open issues" /></a>
-  <a href="https://github.com/peacemakerbill/premisave-listing-service/commits"><img src="https://img.shields.io/github/last-commit/peacemakerbill/premisave-listing-service?style=for-the-badge" alt="Last commit" /></a>
-  <img src="https://img.shields.io/github/repo-size/peacemakerbill/premisave-listing-service?style=for-the-badge" alt="Repository size" />
-  <img src="https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge" alt="Proprietary license" />
-  <img src="https://img.shields.io/badge/Made_in-Nairobi,_Kenya-000000?style=for-the-badge" alt="Made in Nairobi, Kenya" />
-</p>
+**[Quick start](#quick-start)** &nbsp;|&nbsp; **[Where it sits](#where-it-sits)** &nbsp;|&nbsp; **[Flutter app](#connected-to-the-flutter-app)** &nbsp;|&nbsp; **[Architecture](#architecture)** &nbsp;|&nbsp; **[Bookings](#how-bookings-work)** &nbsp;|&nbsp; **[Configuration](#configuration-reference)** &nbsp;|&nbsp; **[Troubleshooting](#troubleshooting)**
 
-<p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#how-ad-promotion-works">How ad promotion works</a> ·
-  <a href="#how-bookings-work">How bookings work</a> ·
-  <a href="#api-reference">API reference</a> ·
-  <a href="#configuration-reference">Configuration</a> ·
-  <a href="#troubleshooting">Troubleshooting</a>
-</p>
+</div>
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 > **If this saves you time building a Spring Boot listings/booking backend, please star the repo.** It helps other Kenyan fintech and proptech developers find it.
 
 > **Disclaimer.** This is an independent, community-built project shared as a portfolio and reference implementation. It is not affiliated with or endorsed by any third-party service it integrates with. Always follow each provider's own current documentation for onboarding and go-live requirements.
 
----
+## Contents
 
-## Table of contents
+- [What is this?](#what-is-this)
+- [Features](#features)
+- [Listing categories](#listing-categories)
+- [Architecture](#architecture)
+- [How ad promotion works](#how-ad-promotion-works)
+- [How bookings work](#how-bookings-work)
+- [Lead capture (listing interest)](#lead-capture-listing-interest)
+- [Currency model](#currency-model)
+- [Listing images](#listing-images)
+- [Where it sits](#where-it-sits)
+- [A request, step by step](#a-request-step-by-step)
+- [Connected to the Flutter app](#connected-to-the-flutter-app)
+- [Quick start](#quick-start)
+- [Build and run](#build-and-run)
+- [Configuration reference](#configuration-reference)
+- [API reference](#api-reference)
+- [Testing with Postman or curl](#testing-with-postman-or-curl)
+- [Rate limiting](#rate-limiting)
+- [Data model](#data-model)
+- [Going live](#going-live)
+- [Security notes](#security-notes)
+- [Project structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Upgrading from earlier deliveries](#upgrading-from-earlier-deliveries)
+- [Known limits](#known-limits)
+- [Roadmap ideas](#roadmap-ideas)
+- [Contributing](#contributing)
+- [Author](#author)
 
-1. [What is this?](#what-is-this)
-2. [Features](#features)
-3. [Listing categories](#listing-categories)
-4. [Architecture](#architecture)
-5. [How ad promotion works](#how-ad-promotion-works)
-6. [How bookings work](#how-bookings-work)
-7. [Lead capture (listing interest)](#lead-capture-listing-interest)
-8. [Currency model](#currency-model)
-9. [Listing images](#listing-images)
-10. [Quick start](#quick-start)
-11. [Build and run](#build-and-run)
-12. [Configuration reference](#configuration-reference)
-13. [API reference](#api-reference)
-14. [Testing with Postman or curl](#testing-with-postman-or-curl)
-15. [Rate limiting](#rate-limiting)
-16. [Data model](#data-model)
-17. [Going live](#going-live)
-18. [Security notes](#security-notes)
-19. [Project structure](#project-structure)
-20. [Troubleshooting](#troubleshooting)
-21. [Upgrading from earlier deliveries](#upgrading-from-earlier-deliveries)
-22. [Known limits](#known-limits)
-23. [Roadmap ideas](#roadmap-ideas)
-24. [Contributing](#contributing)
-25. [Author](#author)
-
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## What is this?
 
@@ -324,6 +297,118 @@ What happens to an upload:
 Owner endpoints: `POST /listings/{id}/images` (add), `DELETE /listings/{id}/images/{fileId}`, `PUT /listings/{id}/images/cover` (`{"fileId": "..."}`), `PUT /listings/{id}/images/order` (`{"fileIds": [...]}`). Creating or updating a listing with `files` still works, and an update now **adds** to the existing images instead of replacing them. Hard-deleting a listing as an admin removes its files; an owner's soft delete keeps them.
 
 Old Cloudinary URLs on existing listings are absolute, so they keep working and are never touched. In production serve `/images` through nginx or a CDN rather than the Spring app, back up the folder, and give the app's account write access to it.
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## Where it sits
+
+<img src="docs/assets/services.svg" alt="The Flutter app on the left and the seven Premisave services on the right with their ports and the setting that holds each address. This service is picked out." width="100%"/>
+
+The listing service is the catalog. The Flutter app searches it and books through it, owners manage their listings in it, and it asks the wallet service to move money and the auth-service for the people behind a listing.
+
+| Caller | What for | Proves who it is with |
+| --- | --- | --- |
+| Flutter app | Explore, Bookings, Wishlists, My listings | the person's bearer token |
+| wallet-service | called by this service for payments, refunds and promotion | `X-API-Key` internal key |
+| auth-service | called by this service for profiles, live, never stored | `X-API-Key` internal key |
+
+It listens on port **8082**. The Flutter app finds it with the setting `LISTING_URL`.
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## A request, step by step
+
+<img src="docs/assets/flow.svg" alt="The request the Flutter app makes, step by step, and who answers each step." width="100%"/>
+
+The app only asks. A booking is one request, and the money, the double booking guard, the refund rule and the emails are all decided here, so the app cannot get them wrong.
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
+
+## Connected to the Flutter app
+
+<img src="docs/assets/connect.svg" alt="A screen asks a provider, which asks the repository, which uses the API client to call this service." width="100%"/>
+
+The Flutter app's **Explore** tab, **Bookings**, **Wishlists** and **My listings** screens use this service. Anyone signed in can search. Owners see the bookings and interests they received.
+
+The code is in [`premisave_flutter_frontend`](https://github.com/peacemakerbill/premisave_flutter_frontend): the repository class is `lib/src/data/repositories/listing_repository.dart`, the providers are in `lib/src/state`, and every call below goes through one client built for this service.
+
+### What the app does with it
+
+| Screen | What it does | Calls |
+| --- | --- | --- |
+| Explore | Search with filters, listing detail with an availability check, book, show interest | `GET /listings/search`, `GET /listings/{id}`, `GET /listings/{id}/availability`, `POST /bookings`, `POST /interests` |
+| Bookings | My bookings, a cancellation quote before cancelling, and for owners the bookings received | `GET /bookings/me`, `GET /bookings/received`, `GET /bookings/{id}/cancellation-quote`, `POST /bookings/{id}/cancel` |
+| Wishlists | Listings I showed interest in, and for owners the interests received | `GET /interests/me`, `GET /interests/received`, `DELETE /interests/{id}` |
+| My listings | An owner's listings, a form to create a listing, archive and unarchive | `GET /listings/me`, `POST /listings`, `POST /listings/{id}/archive`, `POST /listings/{id}/unarchive` |
+
+- Answers are plain bodies, not an envelope. Bookings and interests come as a Spring `Page`, and the app reads its `content`.
+- A booking carries only the `listingId`, so the app looks each title up once and keeps it.
+- The app sends an `Idempotency-Key` with every booking. The key belongs to one listing and one set of dates, so a retry after a timeout or a second tap reuses it and gets the first booking back. Changing the listing or the dates makes a new key.
+- The create form sends `POST /listings` as multipart: a `request` part with the details as JSON (content type `application/json`) and one `files` part per photo. It stops at 20 photos, 10 MB each and 40 MB in all, which are this service's limits. A new listing waits for review.
+- The app's dashboards read `GET /listings/search` (live listings for operations and featured listings for clients), `GET /listings/me` (the owner's listings and their review status) and `GET /admin/bookings/needs-review` (finance).
+
+### Settings
+
+In the Flutter app, in `config/env/*.json` or passed with `--dart-define`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `LISTING_URL` | `http://localhost:8082`, or `http://10.0.2.2:8082` on the Android emulator | Where this service lives, with no trailing slash |
+
+On a real phone `localhost` is the phone itself, so use the computer's address on the network. Flutter reads these values only at launch: stop the app and run it again after a change.
+
+In this service's `.env`:
+
+| Variable | Why the app cares |
+| --- | --- |
+| `JWT_SECRET` | Must equal the auth-service value |
+| `CORS_ALLOWED_ORIGINS` | Browser origins that may call this service |
+| `AUTH_SERVICE_URL` | Where profiles are fetched |
+| `WALLET_SERVICE_URL` | Where payments are made |
+
+### Signing and tokens
+
+The app sends `Authorization: Bearer <access token>`. It leaves out the device headers (`X-Client-Platform`, `X-Device-Token`) that only the auth-service reads. The service checks the signature with the same `JWT_SECRET` as the auth-service and reads the user from the claims, so **the two values must be identical**. When the access token has expired the app asks the auth-service for a new one and sends the request again, so this service never sees a refresh.
+
+### Browser rules (CORS)
+
+A phone or desktop build is not stopped by CORS. A browser is, so for the web build this service must allow the address the app is served from, which is `http://localhost:3000` in development.
+
+| Setting | Default | What to do |
+| --- | --- | --- |
+| `CORS_ALLOWED_ORIGINS` | http://localhost:3000 | A comma separated list. Add every origin the web build is served from. |
+
+### Run it together
+
+Each command is run in its own terminal. Start the services this one needs first.
+
+```bash
+# 1. premisave_auth_service
+cd ~/MyProjects/premisave/premisave_auth_service && ./mvnw spring-boot:run
+
+# 2. premisave-wallet-service
+cd ~/MyProjects/premisave/premisave-wallet-service && ./mvnw spring-boot:run
+
+# 3. this service
+cd ~/MyProjects/premisave/premisave-listing-service && ./mvnw spring-boot:run
+
+# 4. the app, on the port the backends allow for browsers
+cd ~/MyProjects/premisave/premisave_flutter_frontend
+flutter run -d chrome --web-port=3000 --dart-define-from-file=config/env/dev.local.json
+```
+
+Leave `LISTING_URL` empty in the app's file and it finds this service on `localhost:8082`. The same walk through for every service is in [the app's docs](https://github.com/peacemakerbill/premisave_flutter_frontend/blob/main/docs/SERVICES.md).
+
+### If it does not connect
+
+| You see | Likely cause | Do this |
+| --- | --- | --- |
+| Explore is empty | No listings exist yet, or a filter is too narrow | Clear the filters, or create a listing from the test console in `test-client` |
+| "Could not reach the server" on Explore | The service is not running, or `LISTING_URL` points elsewhere | Start it, or set `LISTING_URL` and restart the app |
+| Booking fails with a payment message | The wallet service is down or the guest has too little balance | Start the wallet service and top up the wallet |
+| Blocked in Chrome | The origin is not in `CORS_ALLOWED_ORIGINS` | Add `http://localhost:3000` and restart the service |
+
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 ## Quick start
 
@@ -737,7 +822,7 @@ Found a bug or have an integration question? [Open an issue](https://github.com/
   <img src="https://api.star-history.com/svg?repos=peacemakerbill/premisave-listing-service&type=Date" alt="Star history chart for premisave-listing-service" width="600" />
 </a>
 
----
+<img src="docs/assets/divider.svg" alt="" width="100%"/>
 
 <details>
 <summary>Search keywords</summary>
