@@ -66,4 +66,8 @@ public class Listing extends BaseEntity {
     // Promotion Fields
     private boolean isPromoted = false;
     private LocalDateTime promotionEndDate;
+
+    /** The photo and the line the owner chose for the running promotion. Cleared when the promotion ends. */
+    private String promotionImageUrl;
+    private String promotionHeadline;
 }

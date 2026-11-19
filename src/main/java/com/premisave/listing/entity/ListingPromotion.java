@@ -53,6 +53,12 @@ public class ListingPromotion extends BaseEntity {
 
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
 
+    /** The photo shown on this promotion: one of the listing's own photos. */
+    private String imageUrl;
+
+    /** A short line the owner chose to show with the promotion. */
+    private String headline;
+
     /** Client-supplied Idempotency-Key from the promote/extend request, if any. */
     private String idempotencyKey;
 }

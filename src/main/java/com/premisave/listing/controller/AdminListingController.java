@@ -1,7 +1,10 @@
 package com.premisave.listing.controller;
 
+import com.premisave.listing.entity.ListingSettings;
 import com.premisave.listing.enums.ListingStatus;
 import com.premisave.listing.service.AdminService;
+import com.premisave.listing.service.ListingSettingsService;
+import com.premisave.listing.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -9,12 +12,35 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/admin/listings")
 @RequiredArgsConstructor
 public class AdminListingController {
 
     private final AdminService adminService;
+    private final ListingSettingsService settingsService;
+    private final JwtUtil jwtUtil;
+
+    // ====================== SETTINGS ======================
+
+    /** The marketplace settings, including whether new listings need an admin's review. */
+    @GetMapping("/settings")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FINANCE')")
+    public ResponseEntity<ListingSettings> settings() {
+        return ResponseEntity.ok(settingsService.get());
+    }
+
+    /** Turns the review of new listings on or off. Body: { "reviewRequired": true }. */
+    @PutMapping("/settings")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ListingSettings> updateSettings(
+            @RequestBody Map<String, Object> body,
+            @RequestHeader("Authorization") String authorization) {
+        boolean required = Boolean.parseBoolean(String.valueOf(body.get("reviewRequired")));
+        return ResponseEntity.ok(settingsService.setReviewRequired(required, jwtUtil.extractUserId(authorization)));
+    }
 
     // ====================== READ ======================
 

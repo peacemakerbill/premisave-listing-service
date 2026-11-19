@@ -344,7 +344,7 @@ The code is in [`premisave_flutter_frontend`](https://github.com/peacemakerbill/
 - Answers are plain bodies, not an envelope. Bookings and interests come as a Spring `Page`, and the app reads its `content`.
 - A booking carries only the `listingId`, so the app looks each title up once and keeps it.
 - The app sends an `Idempotency-Key` with every booking. The key belongs to one listing and one set of dates, so a retry after a timeout or a second tap reuses it and gets the first booking back. Changing the listing or the dates makes a new key.
-- The create form sends `POST /listings` as multipart: a `request` part with the details as JSON (content type `application/json`) and one `files` part per photo. It stops at 20 photos, 10 MB each and 40 MB in all, which are this service's limits. A new listing waits for review.
+- The create form sends `POST /listings` as multipart: a `request` part with the details as JSON (content type `application/json`) and one `files` part per photo. It stops at 20 photos, 10 MB each and 40 MB in all, which are this service's limits. A new listing is approved straight away unless an admin has turned review on.
 - The app's dashboards read `GET /listings/search` (live listings for operations and featured listings for clients), `GET /listings/me` (the owner's listings and their review status) and `GET /admin/bookings/needs-review` (finance).
 
 ### Settings
@@ -531,6 +531,16 @@ Base URL (local): `http://localhost:8082`
 | `/images/{fileId}` | Public | Serves a stored listing image: `?size=thumb\|medium\|original` |
 | `/social/**` | JWT | Pass-through proxy to auth-service's social features |
 
+### Listing review and visibility
+
+A new listing is approved (`ACTIVE`) the moment it is created, unless an admin has turned review on. What makes a listing visible to clients is a promotion: the public search only returns listings that are promoted and whose promotion has not ended.
+
+| Call | Who | Purpose |
+|---|---|---|
+| `GET /admin/listings/settings` | `ADMIN`, `FINANCE` | Returns `{ "reviewRequired": false, "updatedBy": "...", "updatedAt": "..." }`. Review is off by default. |
+| `PUT /admin/listings/settings` | `ADMIN` | Body `{ "reviewRequired": true }`. With review on, new listings start as `PENDING` and cannot be promoted until an admin approves them. Listings already created are not changed. |
+| `GET /listings/promotions/rate` | `HOME_OWNER` | The daily promotion price, so an app can show the total before the host pays. |
+
 ### `POST /listings/promote`: promote a listing
 
 | | |
@@ -541,9 +551,13 @@ Base URL (local): `http://localhost:8082`
 ```json
 {
   "listingId": "6a8f4a873fdf5d2d54072cb2",
-  "days": 7
+  "days": 7,
+  "imageUrl": "/images/6a8f4a873fdf5d2d54072cb3",
+  "headline": "Two bedrooms close to the park"
 }
 ```
+
+`imageUrl` (one of the listing's own photos, the cover photo when left out) and `headline` (up to 80 characters) are optional and are shown with the promotion. `GET /listings/promotions/my` returns each promotion with its listing title, image, headline, dates and total.
 
 ### `POST /bookings`: book a short-term rental
 

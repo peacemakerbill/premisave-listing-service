@@ -2,6 +2,7 @@ package com.premisave.listing.controller;
 
 import com.premisave.listing.dto.AdPromotionRequest;
 import com.premisave.listing.dto.AdPromotionResponse;
+import com.premisave.listing.dto.PromotionView;
 import com.premisave.listing.dto.ImageListResponse;
 import com.premisave.listing.dto.ListingRequest;
 import com.premisave.listing.dto.ListingUpdateRequest;
@@ -9,7 +10,6 @@ import com.premisave.listing.dto.ListingResponse;
 import com.premisave.listing.dto.MyListingResponse;
 import com.premisave.listing.dto.ReorderImagesRequest;
 import com.premisave.listing.dto.SetCoverImageRequest;
-import com.premisave.listing.entity.ListingPromotion;
 import com.premisave.listing.entity.ShortTermRental;
 import com.premisave.listing.enums.ListingCategory;
 import com.premisave.listing.enums.ListingStatus;
@@ -255,9 +255,15 @@ public class ListingController {
      * Paginated — previously returned every promotion a user ever had in
      * one unbounded response.
      */
+    @GetMapping("/promotions/rate")
+    @PreAuthorize("hasRole('HOME_OWNER')")
+    public ResponseEntity<java.util.Map<String, Object>> promotionRate() {
+        return ResponseEntity.ok(adPromotionService.rate());
+    }
+
     @GetMapping("/promotions/my")
     @PreAuthorize("hasRole('HOME_OWNER')")
-    public ResponseEntity<Page<ListingPromotion>> getMyPromotions(
+    public ResponseEntity<Page<PromotionView>> getMyPromotions(
             @RequestHeader("Authorization") String authorization,
             Pageable pageable) {
         String userId = jwtUtil.extractUserId(authorization);

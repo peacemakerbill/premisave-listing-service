@@ -47,6 +47,7 @@ public class ListingService {
     private final ImageStorageService imageStorage;
     private final JwtService jwtService; // for role extraction
     private final MongoTemplate mongoTemplate;
+    private final ListingSettingsService settingsService;
 
     // ====================== CREATE ======================
 
@@ -117,16 +118,20 @@ public class ListingService {
         listing.setMainImageUrl(request.getMainImageUrl());
         listing.setImageUrls(request.getImageUrls());
 
-        // Listings start as PENDING and inactive — they only become visible
-        // once the owner promotes them and the payment is confirmed.
-        listing.setStatus(ListingStatus.PENDING);
-        listing.setActive(false);
+        // Approval is automatic unless an admin turned review on. Either way a listing is only shown to clients
+        // while it is promoted, so the promotion is what makes it visible.
+        boolean review = settingsService.reviewRequired();
+        listing.setStatus(review ? ListingStatus.PENDING : ListingStatus.ACTIVE);
+        listing.setActive(!review);
 
         listing = saveListing(listing);
 
-        log.info("New listing created (PENDING) by HOME_OWNER={}: listingId={}", user.getId(), listing.getId());
+        log.info("New listing created ({}) by HOME_OWNER={}: listingId={}", listing.getStatus(), user.getId(), listing.getId());
 
-        return new ListingResponse("Listing created successfully. Promote it to make it visible to customers.", listing.getId(), listing.getTitle(), true);
+        String message = review
+                ? "Listing created. It will be reviewed first, and you can promote it once it is approved."
+                : "Listing created and approved. Promote it to make it visible to customers.";
+        return new ListingResponse(message, listing.getId(), listing.getTitle(), true);
     }
 
     private Listing createSpecificListing(ListingRequest request) {

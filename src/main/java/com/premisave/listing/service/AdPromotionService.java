@@ -3,6 +3,7 @@ package com.premisave.listing.service;
 import com.premisave.listing.client.AuthServiceClient;
 import com.premisave.listing.dto.AdPromotionRequest;
 import com.premisave.listing.dto.AdPromotionResponse;
+import com.premisave.listing.dto.PromotionView;
 import com.premisave.listing.dto.auth_service.UserSummaryResponse;
 import com.premisave.listing.entity.Listing;
 import com.premisave.listing.entity.ListingPromotion;
@@ -45,6 +46,7 @@ public class AdPromotionService {
     private final ListingService listingService;
     private final AuthServiceClient authServiceClient;
     private final SchedulerLockService lockService;
+    private final ListingSettingsService settingsService;
 
     @Value("${ad.promotion.daily-rate:2.99}")
     private BigDecimal dailyRate;
@@ -96,6 +98,9 @@ public class AdPromotionService {
         if (!listing.getOwnerId().equals(userId)) {
             throw new RuntimeException("You can only promote your own listings.");
         }
+        ensurePromotable(listing);
+        String imageUrl = chooseImage(listing, request.getImageUrl());
+        String headline = request.getHeadline() == null || request.getHeadline().isBlank() ? null : request.getHeadline().trim();
 
         // 3. Guard: prevent promoting an already-active promotion
         if (listing.isPromoted()
@@ -127,6 +132,8 @@ public class AdPromotionService {
         promotion.setDailyRate(effectiveRate);
         promotion.setTotalAmount(totalAmount);
         promotion.setCurrency(defaultCurrency);
+        promotion.setImageUrl(imageUrl);
+        promotion.setHeadline(headline);
         promotion.setStartDate(now);
         promotion.setEndDate(now.plusDays(days));
         promotion.setPaymentStatus(PaymentStatus.PENDING);
@@ -173,6 +180,8 @@ public class AdPromotionService {
         if (payment.getStatus() == PaymentStatus.COMPLETED) {
             listing.setPromoted(true);
             listing.setPromotionEndDate(promotion.getEndDate());
+            listing.setPromotionImageUrl(imageUrl);
+            listing.setPromotionHeadline(headline);
             listing.setStatus(ListingStatus.ACTIVE);
             listing.setActive(true);
             listingService.saveListing(listing);
@@ -238,6 +247,7 @@ public class AdPromotionService {
         if (!listing.getOwnerId().equals(userId)) {
             throw new RuntimeException("You can only extend promotion on your own listings.");
         }
+        ensurePromotable(listing);
 
         BigDecimal effectiveRate = dailyRate;
         BigDecimal totalAmount = effectiveRate.multiply(BigDecimal.valueOf(additionalDays));
@@ -384,10 +394,11 @@ public class AdPromotionService {
                             .anyMatch(p -> !p.getId().equals(promo.getId()));
 
                     if (!hasNewerPromotion) {
+                        // The listing stays approved. It just stops being shown until it is promoted again.
                         listing.setPromoted(false);
                         listing.setPromotionEndDate(null);
-                        listing.setActive(false);
-                        listing.setStatus(ListingStatus.PENDING);
+                        listing.setPromotionImageUrl(null);
+                        listing.setPromotionHeadline(null);
                         listingService.saveListing(listing);
                         count++;
                         log.info("Listing {} promotion expired and deactivated.", listing.getId());
@@ -408,7 +419,72 @@ public class AdPromotionService {
 
     /** Paginated — previously returned every promotion a user ever had in
      *  one unbounded list. */
-    public Page<ListingPromotion> getUserPromotions(String ownerId, Pageable pageable) {
-        return promotionRepository.findByOwnerId(ownerId, pageable);
+    public Page<PromotionView> getUserPromotions(String ownerId, Pageable pageable) {
+        return promotionRepository.findByOwnerId(ownerId, pageable).map(this::toView);
+    }
+
+    /** What a day of promotion costs, so the app can show the price before the owner pays. */
+    public java.util.Map<String, Object> rate() {
+        return java.util.Map.of("dailyRate", dailyRate, "currency", defaultCurrency);
+    }
+
+    private PromotionView toView(ListingPromotion p) {
+        String title = null;
+        String cover = null;
+        try {
+            Listing listing = (Listing) listingService.getListingById(p.getListingId());
+            title = listing.getTitle();
+            cover = listing.getMainImageUrl();
+        } catch (RuntimeException e) {
+            log.debug("Listing {} of promotion {} is gone", p.getListingId(), p.getId());
+        }
+        String status;
+        if (p.getPaymentStatus() == PaymentStatus.COMPLETED) {
+            status = p.getEndDate() != null && p.getEndDate().isAfter(LocalDateTime.now()) ? "ACTIVE" : "EXPIRED";
+        } else {
+            status = p.getPaymentStatus().name();
+        }
+        return new PromotionView(p.getId(), p.getListingId(), title,
+                p.getImageUrl() != null ? p.getImageUrl() : cover, p.getHeadline(),
+                p.getDays(), p.getDailyRate(), p.getTotalAmount(), p.getCurrency(),
+                p.getStartDate(), p.getEndDate(), status, p.getCreatedAt());
+    }
+
+    // ====================== RULES ======================
+
+    /**
+     * A listing can be promoted once it is approved. With review off, a listing that is still waiting (made before the
+     * switch was turned off) is approved here. With review on, it waits for an admin.
+     */
+    private void ensurePromotable(Listing listing) {
+        if (listing.isDeleted() || listing.isArchived()) {
+            throw new RuntimeException("This listing is archived or deleted. Restore it before promoting it.");
+        }
+        if (listing.getStatus() == ListingStatus.ACTIVE) {
+            return;
+        }
+        if (listing.getStatus() == ListingStatus.PENDING) {
+            if (settingsService.reviewRequired()) {
+                throw new RuntimeException("This listing is waiting for review. You can promote it once it is approved.");
+            }
+            listing.setStatus(ListingStatus.ACTIVE);
+            listing.setActive(true);
+            return;
+        }
+        throw new RuntimeException("A listing that is " + listing.getStatus().name().toLowerCase() + " cannot be promoted.");
+    }
+
+    /** The photo for a promotion: one of the listing's own photos, or its cover when none was chosen. */
+    private static String chooseImage(Listing listing, String requested) {
+        if (requested == null || requested.isBlank()) {
+            return listing.getMainImageUrl();
+        }
+        String wanted = requested.trim();
+        boolean own = wanted.equals(listing.getMainImageUrl())
+                || (listing.getImageUrls() != null && listing.getImageUrls().contains(wanted));
+        if (!own) {
+            throw new IllegalArgumentException("Choose one of this listing's own photos for the promotion.");
+        }
+        return wanted;
     }
 }
