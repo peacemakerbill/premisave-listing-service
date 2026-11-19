@@ -193,6 +193,8 @@ escrow:
 # Booking emails are written to the email_outbox collection first and sent
 # from there, so a mail-server outage delays them instead of losing them.
 email:
+  # Shown in the footer of every email, the same setting the auth service uses.
+  support: ${SUPPORT_EMAIL:thepeacemakerske@gmail.com}
   outbox:
     poll-ms: 30000
     max-attempts: 6

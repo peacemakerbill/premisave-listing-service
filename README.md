@@ -88,7 +88,7 @@ It was built for the Premisave platform's own microservice ecosystem (alongside 
 | **Ad promotion** | Pay a configurable daily rate to feature a listing; extend an active promotion; a scheduled sweep automatically deactivates expired ones. |
 | **Lead capture (listing interest)** | No-money "contact me" flow for long-term rentals, leases, and sales — the owner gets the lead's contact details, fetched live rather than stored. |
 | **Live currency display** | Scheduled background refresh from the Frankfurter API, USD-based, for browsing listings in other currencies. |
-| **HTML email notifications** | Booking confirmed/cancelled, interest expressed/cancelled — sent to both parties, Thymeleaf-rendered, styled to match the platform's wallet-service emails. |
+| **HTML email notifications** | Booking confirmed/cancelled, interest expressed/cancelled — sent to both parties, Thymeleaf-rendered, in the same design as the auth service emails (indigo header, amber accent, rounded detail card, dark mode). |
 | **Tiered, distributed rate limiting** | Redis-backed via Bucket4j, per authenticated user or IP, with separate budgets for ordinary browsing, listing writes, and money-moving/lead-generating actions. |
 | **Circuit-breaker-protected integrations** | Every call to `auth-service` and `wallet-service` goes through a Feign client with a Resilience4j circuit breaker and an explicit fallback, so a dependency outage fails cleanly instead of hanging. |
 | **Admin listing management** | Role-gated (`ADMIN`/`FINANCE`) endpoints for moderating listings across the whole platform. |
@@ -494,6 +494,7 @@ java -jar target/premisave-listing-service-0.0.1-SNAPSHOT.jar
 | `INTERNAL_SERVICE_API_KEY` | none, secret | Shared secret every Premisave microservice presents as `X-API-Key` for service-to-service calls, the same value across the whole platform. |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` | none, secret | SMTP credentials for booking/interest notification emails. |
 | `MAIL_FROM` | `no-reply@premisave.com` | The "From" address on every notification email. |
+| `SUPPORT_EMAIL` | `thepeacemakerske@gmail.com` | Support address printed in the footer of every email. |
 | `MONGODB_URI` | `mongodb://localhost:27017/premisave-listing` | MongoDB connection string. |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis connection for rate limiting and currency-rate caching. |
 | `AUTH_SERVICE_URL` | `http://localhost:8080` | Base URL of auth-service. |

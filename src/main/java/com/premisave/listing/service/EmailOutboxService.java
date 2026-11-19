@@ -48,6 +48,9 @@ public class EmailOutboxService {
     @Value("${mail-from:no-reply@premisave.com}")
     private String fromAddress;
 
+    @Value("${email.support:thepeacemakerske@gmail.com}")
+    private String supportEmail;
+
     @Value("${email.outbox.max-attempts:6}")
     private int maxAttempts;
 
@@ -115,6 +118,9 @@ public class EmailOutboxService {
             if (mail.getVariables() != null) {
                 context.setVariables(mail.getVariables());
             }
+            // Shared by every template for the footer; set after the stored variables so a record cannot override them.
+            context.setVariable("supportEmail", supportEmail);
+            context.setVariable("year", java.time.Year.now().getValue());
             String html = templateEngine.process(mail.getTemplate(), context);
 
             MimeMessage message = mailSender.createMimeMessage();
